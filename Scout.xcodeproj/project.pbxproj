@@ -10,9 +10,38 @@
 		1C8ED5352FB3B5890059C826 /* Scout.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Scout.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0C1788532FB52E39005C3190 /* Exceptions for "Scout" folder in "Scout" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"designs/Scout-handoff/scout/project/app.jsx",
+				"designs/Scout-handoff/scout/project/data.jsx",
+				"designs/Scout-handoff/scout/project/design-canvas.jsx",
+				"designs/Scout-handoff/scout/project/direction-a-circles.jsx",
+				"designs/Scout-handoff/scout/project/direction-a-journal.jsx",
+				"designs/Scout-handoff/scout/project/direction-a.jsx",
+				"designs/Scout-handoff/scout/project/direction-b.jsx",
+				"designs/Scout-handoff/scout/project/direction-c.jsx",
+				"designs/Scout-handoff/scout/project/ios-frame.jsx",
+				"designs/Scout-handoff/scout/project/Scout Designs-print.html",
+				"designs/Scout-handoff/scout/project/Scout Designs.html",
+				"designs/Scout-handoff/scout/project/uploads/Scout Design.pdf",
+				"designs/Scout-handoff/scout/project/uploads/Scout.md",
+				"designs/Scout-handoff/scout/project/uploads/SPEC.md",
+				"designs/Scout-handoff/scout/README.md",
+				Scout.md,
+				SPEC.md,
+			);
+			target = 1C8ED5342FB3B5890059C826 /* Scout */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1C8ED5372FB3B5890059C826 /* Scout */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0C1788532FB52E39005C3190 /* Exceptions for "Scout" folder in "Scout" target */,
+			);
 			path = Scout;
 			sourceTree = "<group>";
 		};
@@ -260,7 +289,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -302,7 +331,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
