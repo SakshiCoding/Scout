@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scout — Design Directions (Print)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: landscape; margin: 0.5cm; }
+    html, body { margin: 0; padding: 0; background: #f0eee9; font-family: "DM Sans", -apple-system, system-ui, sans-serif; color: #1B1612; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    .page {
+      width: 1100px;
+      min-height: 760px;
+      margin: 0 auto;
+      padding: 32px 40px 24px;
+      box-sizing: border-box;
+      page-break-after: always;
+      break-after: page;
+      display: flex;
+      flex-direction: column;
+      background: #f0eee9;
+    }
+    .page:last-child { page-break-after: auto; break-after: auto; }
+
+    .pageHead {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(0,0,0,0.12);
+    }
+    .pageHead .left { display: flex; flex-direction: column; gap: 4px; }
+    .pageHead .eyebrow { font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: rgba(0,0,0,0.45); }
+    .pageHead h1 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; font-size: 36px; line-height: 1; letter-spacing: -0.5px; margin: 0; }
+    .pageHead .sub { max-width: 540px; text-align: right; font-size: 12.5px; color: rgba(0,0,0,0.6); line-height: 1.45; }
+
+    .row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex: 1;
+    }
+
+    .frame { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .frame .label { font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: rgba(0,0,0,0.5); }
+
+    /* Each iPhone is rendered at its native 402×874 then scaled. */
+    .scaler {
+      width: 241px;   /* 402 * 0.60 */
+      height: 524px;  /* 874 * 0.60 */
+      position: relative;
+    }
+    .scaler > .ios-host {
+      transform: scale(0.60);
+      transform-origin: top left;
+      width: 402px;
+      height: 874px;
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+
+    .footer {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: "Geist Mono", ui-monospace, monospace;
+      font-size: 9.5px;
+      letter-spacing: 0.5px;
+      color: rgba(0,0,0,0.45);
+      text-transform: uppercase;
+    }
+
+    .palette { display: inline-flex; gap: 6px; align-items: center; }
+    .swatch { width: 12px; height: 12px; border-radius: 99px; border: 1px solid rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="direction-a.jsx"></script>
+  <script type="text/babel" src="direction-b.jsx"></script>
+  <script type="text/babel" src="direction-c.jsx"></script>
+
+  <script type="text/babel" data-presets="env,react">
+    const DIRECTIONS = [
+      {
+        eyebrow: 'Direction A',
+        title: 'Atlas',
+        sub: 'Editorial cream paper + burnt-orange compass marks + serif numerals. Feels like a curated travel atlas — slower, more lived-in.',
+        type: 'DM Serif Display · DM Sans',
+        swatches: ['#F7F1E6', '#1B1612', '#CC5500', '#E5651C'],
+        screens: [
+          { label: 'Wishlist',        comp: <AWishlist /> },
+          { label: 'Restaurant card', comp: <ADetail /> },
+          { label: 'Pick for us',     comp: <APickForUs /> },
+          { label: 'Map',             comp: <AMap /> },
+        ],
+      },
+      {
+        eyebrow: 'Direction B',
+        title: 'Heat',
+        sub: 'Bone white + chunky display sans + vivid #FF6B00 + mono numerals. High-energy, signage-bold, built for fast tapping.',
+        type: 'Space Grotesk · Geist Mono',
+        swatches: ['#FBFAF7', '#0E0E0C', '#FF6B00', '#FFB16B'],
+        screens: [
+          { label: 'Wishlist',        comp: <BWishlist /> },
+          { label: 'Restaurant card', comp: <BDetail /> },
+          { label: 'Pick for us',     comp: <BPickForUs /> },
+          { label: 'Map',             comp: <BMap /> },
+        ],
+      },
+      {
+        eyebrow: 'Direction C',
+        title: 'Ember',
+        sub: 'Deep cocoa dark mode + glowing burnt-orange + italic serif. Intimate, date-night, "where do you want to eat tonight?"',
+        type: 'Instrument Serif · Manrope',
+        swatches: ['#16110D', '#F5EBDD', '#FF7A1A', '#FF9F4A'],
+        screens: [
+          { label: 'Wishlist',     comp: <CWishlist /> },
+          { label: 'Detail',       comp: <CDetail /> },
+          { label: 'Match reveal', comp: <CPickForUs /> },
+          { label: 'Map',          comp: <CMap /> },
+        ],
+      },
+    ];
+
+    function Page({ d }) {
+      return (
+        <div className="page">
+          <div className="pageHead">
+            <div className="left">
+              <div className="eyebrow">{d.eyebrow} · {d.type}</div>
+              <h1>{d.title}</h1>
+            </div>
+            <div className="sub">{d.sub}</div>
+          </div>
+
+          <div className="row">
+            {d.screens.map((s, i) => (
+              <div key={i} className="frame">
+                <div className="scaler">
+                  <div className="ios-host">{s.comp}</div>
+                </div>
+                <div className="label">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="footer">
+            <div>Scout · iOS · couples wishlist · v1–v3 feature set</div>
+            <div className="palette">
+              Palette
+              {d.swatches.map(c => <span key={c} className="swatch" style={{ background: c }} />)}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function Print() {
+      return (
+        <>
+          {DIRECTIONS.map((d, i) => <Page key={i} d={d} />)}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<Print />);
+
+    // Auto-print once fonts/JSX are settled.
+    (async () => {
+      try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (_) {}
+      await new Promise(r => setTimeout(r, 700));
+      window.print();
+    })();
+  </script>
+</body>
+</html>
