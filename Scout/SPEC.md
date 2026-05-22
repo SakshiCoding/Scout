@@ -85,21 +85,31 @@ Each circle has:
 
 ## Development Phases
 
-### Phase 1 — Foundation
+### Phase 1 — Foundation — Complete
 > Goal: core data model, auth, circles, and basic wishlist working end to end
 
-- [ ] Supabase schema (restaurants, visits, media, circles, circle_members)
-- [ ] Sign in with Apple + Supabase Auth
-- [ ] Circles data model + circle switching
-- [ ] Restaurant model + SupabaseService
-- [ ] WishlistView (list UI)
-- [ ] AddRestaurantView (manual add)
-- [ ] BulkImportView (paste to import)
-- [ ] LocationService + distance sorting
-- [ ] Basic RestaurantCardView
-- [ ] Tag system (cuisine, vibe, price)
-- [ ] FilterSheetView
-- [ ] CirclePickerSheet + CircleSwitcherPill
+- [x] Supabase schema (profiles, restaurants, visits, media, circles, circle_members)
+- [x] Sign in/auth foundation + Supabase Auth integration
+- [x] Circles data model + circle switching
+- [x] Restaurant model + SupabaseService
+- [x] WishlistView (list UI)
+- [x] AddRestaurantView (manual add)
+- [x] BulkImportView (paste to import)
+- [x] LocationService + distance sorting foundation
+- [x] RestaurantRowView
+- [x] Tag system (cuisine, vibe, price)
+- [x] FilterSheetView
+- [x] CirclePickerSheet + CircleSwitcherPill
+
+Phase 1 verified behavior:
+
+- App restores existing circles after restart.
+- Manual restaurant add persists.
+- Bulk import persists.
+- Wishlist rows appear immediately after add/import and reload after restart.
+- Filter apply, reset, and clear work for available metadata.
+
+Backend note: Supabase migrations live in `supabase/migrations/`. Circle and restaurant creation/loading use RPC functions (`create_circle`, `get_my_circles`, `add_restaurant`, `get_circle_restaurants`) plus `is_circle_member` to avoid client-side RLS timing issues.
 
 ### Phase 2 — Enrichment & Core Features
 > Goal: make the app genuinely useful day-to-day

@@ -106,6 +106,8 @@ struct FilterSheetView: View {
             HStack(spacing: 12) {
                 Button("Reset") {
                     localFilter.reset()
+                    appState.filterState.reset()
+                    isPresented = false
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)

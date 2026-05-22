@@ -1,4 +1,4 @@
-# Scout — Claude Development Guide
+# Scout — Codex Development Guide
 
 Scout is a shared restaurant wishlist iOS app organized around **circles** — named groups (couples, families, roommates, travel crews) each with their own wishlist, map, swipe picker, and photo journal. Built with SwiftUI + Supabase + MapKit + CoreLocation + Apple Places API + Google Gemini API.
 

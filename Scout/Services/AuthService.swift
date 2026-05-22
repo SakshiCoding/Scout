@@ -61,8 +61,13 @@ final class AuthService: ObservableObject {
 
     func signUpWithEmail(email: String, password: String) async throws {
         let response = try await supabase.auth.signUp(email: email, password: password)
-        currentUser     = response.user
-        isAuthenticated = response.user != nil
+        guard let session = response.session else {
+            currentUser     = nil
+            isAuthenticated = false
+            throw AuthError.emailConfirmationRequired
+        }
+        currentUser     = session.user
+        isAuthenticated = true
     }
 
     func signOut() async throws {
@@ -123,6 +128,15 @@ final class AuthService: ObservableObject {
 
     enum AuthError: LocalizedError {
         case missingToken
-        var errorDescription: String? { "Apple identity token was missing." }
+        case emailConfirmationRequired
+
+        var errorDescription: String? {
+            switch self {
+            case .missingToken:
+                "Apple identity token was missing."
+            case .emailConfirmationRequired:
+                "Check your email and click the confirmation link first."
+            }
+        }
     }
 }
