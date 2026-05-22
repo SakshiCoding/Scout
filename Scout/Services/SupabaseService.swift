@@ -46,25 +46,52 @@ final class SupabaseService {
 
     // MARK: - Insert-only structs (exclude server-generated fields)
 
-    private struct CircleInsert: Encodable {
-        let name: String
-        let shortName: String?
-        let accentColor: String
+    private struct CreateCircleParams: Encodable {
+        let circleName: String
+        let circleShortName: String?
+        let circleAccentColor: String
+        let memberInitials: String
         enum CodingKeys: String, CodingKey {
-            case name
-            case shortName   = "short_name"
-            case accentColor = "accent_color"
+            case circleName        = "circle_name"
+            case circleShortName   = "circle_short_name"
+            case circleAccentColor = "circle_accent_color"
+            case memberInitials    = "member_initials"
         }
     }
 
-    private struct MemberInsert: Encodable {
-        let circleId: UUID
-        let userId: UUID
-        let initials: String
+    private struct AddRestaurantParams: Encodable {
+        let restaurantCircleId: UUID
+        let restaurantName: String
+        let restaurantCuisine: String?
+        let restaurantPriceTier: String?
+        let restaurantAddress: String?
+        let restaurantLatitude: Double?
+        let restaurantLongitude: Double?
+        let restaurantNotes: String?
+        let restaurantVibeTags: [String]
+        let restaurantRating: Double?
+        let restaurantPhotoUrl: String?
+
         enum CodingKeys: String, CodingKey {
-            case circleId = "circle_id"
-            case userId   = "user_id"
-            case initials
+            case restaurantCircleId  = "restaurant_circle_id"
+            case restaurantName      = "restaurant_name"
+            case restaurantCuisine   = "restaurant_cuisine"
+            case restaurantPriceTier = "restaurant_price_tier"
+            case restaurantAddress   = "restaurant_address"
+            case restaurantLatitude  = "restaurant_latitude"
+            case restaurantLongitude = "restaurant_longitude"
+            case restaurantNotes     = "restaurant_notes"
+            case restaurantVibeTags  = "restaurant_vibe_tags"
+            case restaurantRating    = "restaurant_rating"
+            case restaurantPhotoUrl  = "restaurant_photo_url"
+        }
+    }
+
+    private struct GetCircleRestaurantsParams: Encodable {
+        let targetCircleId: UUID
+
+        enum CodingKeys: String, CodingKey {
+            case targetCircleId = "target_circle_id"
         }
     }
 
@@ -72,63 +99,78 @@ final class SupabaseService {
 
     func createCircle(name: String, shortName: String? = nil, accentColor: String = "#CC5500", userId: UUID, userInitials: String) async throws -> ScoutCircle {
         let circle: ScoutCircle = try await client
-            .from("circles")
-            .insert(CircleInsert(name: name, shortName: shortName, accentColor: accentColor))
-            .select()
-            .single()
+            .rpc(
+                "create_circle",
+                params: CreateCircleParams(
+                    circleName: name,
+                    circleShortName: shortName,
+                    circleAccentColor: accentColor,
+                    memberInitials: userInitials
+                )
+            )
             .execute()
             .value
-        try await client
-            .from("circle_members")
-            .insert(MemberInsert(circleId: circle.id, userId: userId, initials: userInitials))
-            .execute()
         let all = try await fetchCircles(for: userId)
         return all.first { $0.id == circle.id } ?? circle
     }
 
     func fetchCircles(for userId: UUID) async throws -> [ScoutCircle] {
-        // Fetch circles where the user is a member, including members list
+        _ = userId
+
         let response: [ScoutCircle] = try await client
-            .from("circles")
-            .select("*, circle_members(*)")
+            .rpc("get_my_circles")
             .execute()
             .value
-        // Filter locally to circles where user is a member
-        return response.filter { circle in
-            circle.members.contains { $0.userId == userId }
-        }
+        return response
     }
 
     // MARK: - Restaurants
 
     func fetchRestaurants(circleId: UUID) async throws -> [Restaurant] {
         try await client
-            .from("restaurants")
-            .select()
-            .eq("circle_id", value: circleId)
-            .order("created_at", ascending: false)
+            .rpc(
+                "get_circle_restaurants",
+                params: GetCircleRestaurantsParams(targetCircleId: circleId)
+            )
             .execute()
             .value
     }
 
     func addRestaurant(_ restaurant: Restaurant) async throws -> Restaurant {
         try await client
-            .from("restaurants")
-            .insert(restaurant)
-            .select()
-            .single()
+            .rpc(
+                "add_restaurant",
+                params: AddRestaurantParams(
+                    restaurantCircleId: restaurant.circleId,
+                    restaurantName: restaurant.name,
+                    restaurantCuisine: restaurant.cuisine,
+                    restaurantPriceTier: restaurant.priceTier?.rawValue,
+                    restaurantAddress: restaurant.address,
+                    restaurantLatitude: restaurant.latitude,
+                    restaurantLongitude: restaurant.longitude,
+                    restaurantNotes: restaurant.notes,
+                    restaurantVibeTags: restaurant.vibeTags,
+                    restaurantRating: restaurant.rating,
+                    restaurantPhotoUrl: restaurant.photoUrl
+                )
+            )
             .execute()
             .value
     }
 
-    func bulkAddRestaurants(_ names: [String], circleId: UUID, addedBy: UUID) async throws {
-        let restaurants = names.map { name in
-            Restaurant(circleId: circleId, name: name, addedBy: addedBy)
+    func bulkAddRestaurants(_ names: [String], circleId: UUID, addedBy: UUID) async throws -> [Restaurant] {
+        var savedRestaurants: [Restaurant] = []
+        for name in names {
+            let saved = try await addRestaurant(
+                Restaurant(
+                    circleId: circleId,
+                    name: name,
+                    addedBy: addedBy
+                )
+            )
+            savedRestaurants.append(saved)
         }
-        try await client
-            .from("restaurants")
-            .insert(restaurants)
-            .execute()
+        return savedRestaurants
     }
 
     func updateRestaurant(_ restaurant: Restaurant) async throws {

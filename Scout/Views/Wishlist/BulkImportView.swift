@@ -192,7 +192,7 @@ struct BulkImportView: View {
             try await appState.bulkImport(names: parsedNames)
             isPresented = false
         } catch {
-            errorMessage = "Import failed. Please try again."
+            errorMessage = error.localizedDescription
         }
         isImporting = false
     }

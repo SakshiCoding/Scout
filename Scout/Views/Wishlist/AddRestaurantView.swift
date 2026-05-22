@@ -148,7 +148,7 @@ struct AddRestaurantView: View {
             try await appState.addRestaurant(restaurant)
             isPresented = false
         } catch {
-            errorMessage = "Couldn't save. Please try again."
+            errorMessage = error.localizedDescription
         }
         isSaving = false
     }

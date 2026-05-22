@@ -118,7 +118,7 @@ struct NewCircleSheet: View {
             )
             isPresented = false
         } catch {
-            errorMessage = "Couldn't create circle. Please try again."
+            errorMessage = error.localizedDescription
         }
         isCreating = false
     }

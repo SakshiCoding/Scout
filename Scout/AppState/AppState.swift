@@ -106,14 +106,16 @@ final class AppState {
 
     func addRestaurant(_ restaurant: Restaurant) async throws {
         let saved = try await supabase.addRestaurant(restaurant)
+        activeTab = .wantToTry
         restaurants.insert(saved, at: 0)
     }
 
     func bulkImport(names: [String]) async throws {
         guard let circleId = activeCircle?.id,
               let userId   = currentUser?.id else { return }
-        try await supabase.bulkAddRestaurants(names, circleId: circleId, addedBy: userId)
-        await loadRestaurants()
+        let saved = try await supabase.bulkAddRestaurants(names, circleId: circleId, addedBy: userId)
+        activeTab = .wantToTry
+        restaurants.insert(contentsOf: saved.reversed(), at: 0)
     }
 
     // MARK: - Private
