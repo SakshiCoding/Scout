@@ -118,6 +118,22 @@ final class AppState {
         restaurants.insert(contentsOf: saved.reversed(), at: 0)
     }
 
+    func updateRestaurant(_ updated: Restaurant) async throws {
+        try await supabase.updateRestaurant(updated)
+        if let idx = restaurants.firstIndex(where: { $0.id == updated.id }) {
+            var merged = updated
+            merged.distanceMiles = restaurants[idx].distanceMiles
+            restaurants[idx] = merged
+        }
+    }
+
+    func markVisited(restaurantId: UUID) async throws {
+        try await supabase.markVisited(restaurantId)
+        if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
+            restaurants[idx].status = .visited
+        }
+    }
+
     // MARK: - Private
 
     private func observeAuth() {
