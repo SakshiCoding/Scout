@@ -1,0 +1,470 @@
+import SwiftUI
+
+struct RestaurantDetailView: View {
+    let restaurantId: UUID
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var showEdit = false
+    @State private var isMarkingVisited = false
+
+    private var restaurant: Restaurant? {
+        appState.restaurants.first { $0.id == restaurantId }
+    }
+
+    var body: some View {
+        Group {
+            if let r = restaurant {
+                ZStack(alignment: .bottom) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            heroArea(r)
+                            titleBlock(r)
+                            statRow(r)
+                            if let notes = r.notes, !notes.isEmpty {
+                                noteCard(notes)
+                            }
+                            if !r.vibeTags.isEmpty {
+                                vibeTagsSection(r.vibeTags)
+                            }
+                            Spacer().frame(height: Atlas.listBottomPad + 80)
+                        }
+                    }
+                    .ignoresSafeArea(edges: .top)
+
+                    ctaButtons(r)
+                        .padding(.horizontal, Atlas.screenHPad)
+                        .padding(.bottom, Atlas.tabBarBottomOffset + Atlas.tabBarHeight + 12)
+                }
+                .background(Atlas.paper.ignoresSafeArea())
+            } else {
+                Color.clear.onAppear { dismiss() }
+            }
+        }
+        .sheet(isPresented: $showEdit) {
+            if let r = restaurant {
+                EditRestaurantSheet(restaurant: r, isPresented: $showEdit)
+                    .presentationCornerRadius(Atlas.sheetTopRadius)
+            }
+        }
+    }
+
+    // MARK: - Hero area
+
+    private func heroArea(_ r: Restaurant) -> some View {
+        ZStack(alignment: .top) {
+            // Placeholder hero
+            Atlas.paper2
+                .frame(height: 300)
+                .overlay(
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 32, weight: .ultraLight))
+                            .foregroundColor(Atlas.ink3)
+                        Text("No photo yet")
+                            .font(Atlas.Font.sans(12))
+                            .foregroundColor(Atlas.ink3)
+                    }
+                )
+
+            // Controls overlay
+            HStack(alignment: .center) {
+                Button { dismiss() } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Atlas.paper.opacity(0.92))
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                            .frame(width: 38, height: 38)
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Atlas.ink)
+                    }
+                }
+                .buttonStyle(.plain)
+                .shadow(color: Color(red: 50/255, green: 30/255, blue: 10/255).opacity(0.18),
+                        radius: 6, x: 0, y: 4)
+
+                Spacer()
+
+                if let circle = appState.activeCircle {
+                    CircleSwitcherPill(circle: circle, glassStyle: true)
+                        .allowsHitTesting(false)
+                }
+            }
+            .padding(.top, 56)
+            .padding(.horizontal, 16)
+        }
+    }
+
+    // MARK: - Title block
+
+    private func titleBlock(_ r: Restaurant) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Cuisine · Price · Distance
+            HStack(spacing: 5) {
+                if let cuisine = r.cuisine {
+                    Text(cuisine.uppercased())
+                }
+                if r.cuisine != nil && (r.priceTier != nil || r.formattedDistance != nil) {
+                    Text("·").foregroundColor(Atlas.ink3)
+                }
+                if let price = r.priceTier {
+                    Text(price.rawValue)
+                }
+                if let dist = r.formattedDistance {
+                    if r.priceTier != nil {
+                        Text("·").foregroundColor(Atlas.ink3)
+                    }
+                    Text("\(dist) MI")
+                }
+            }
+            .font(Atlas.Font.sans(11.5))
+            .foregroundColor(Atlas.ink3)
+            .kerning(1.4)
+
+            Text(r.name)
+                .font(Atlas.Font.serif(40))
+                .foregroundColor(Atlas.ink)
+                .lineLimit(3)
+                .minimumScaleFactor(0.8)
+                .padding(.top, 8)
+
+            StatusDot(status: .open)
+                .padding(.top, 12)
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.top, 22)
+    }
+
+    // MARK: - Stat row
+
+    private func statRow(_ r: Restaurant) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            if let rating = r.rating {
+                StatCell(value: String(format: "%.1f", rating), label: "RATING")
+                Spacer()
+            }
+            if let price = r.priceTier {
+                StatCell(value: price.rawValue, label: "PRICE")
+                Spacer()
+            }
+            if let dist = r.formattedDistance {
+                StatCell(value: dist, label: "MILES AWAY")
+            } else if r.rating == nil && r.priceTier == nil {
+                StatCell(value: "—", label: "RATING")
+                Spacer()
+                StatCell(value: "—", label: "PRICE")
+                Spacer()
+                StatCell(value: "—", label: "MILES AWAY")
+            }
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.vertical, 18)
+        .overlay(alignment: .top) {
+            Atlas.rule
+                .frame(height: 1)
+                .padding(.horizontal, Atlas.screenHPad)
+        }
+        .overlay(alignment: .bottom) {
+            Atlas.rule
+                .frame(height: 1)
+                .padding(.horizontal, Atlas.screenHPad)
+        }
+        .padding(.top, 22)
+    }
+
+    // MARK: - Note card
+
+    private func noteCard(_ notes: String) -> some View {
+        Text(notes)
+            .font(Atlas.Font.serif(16, italic: true))
+            .foregroundColor(Atlas.ink)
+            .lineSpacing(4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(Atlas.paper2)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, Atlas.screenHPad)
+            .padding(.top, 20)
+    }
+
+    // MARK: - Vibe tags
+
+    private func vibeTagsSection(_ tags: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("VIBE")
+                .font(Atlas.Font.sans(10.5, weight: .medium))
+                .foregroundColor(Atlas.ink3)
+                .kerning(1.6)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(tags, id: \.self) { tag in
+                        FilterChip(label: tag, isActive: false, action: {})
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.top, 24)
+    }
+
+    // MARK: - CTA buttons
+
+    private func ctaButtons(_ r: Restaurant) -> some View {
+        HStack(spacing: 10) {
+            if r.status == .wantToTry {
+                Button {
+                    Task { await markVisited(r) }
+                } label: {
+                    Group {
+                        if isMarkingVisited {
+                            ProgressView().tint(Atlas.paper)
+                        } else {
+                            Text("Mark as visited")
+                                .font(Atlas.Font.sans(14.5, weight: .semibold))
+                                .foregroundColor(Atlas.paper)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Atlas.ink)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(isMarkingVisited)
+            } else {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Atlas.statusOpen)
+                        .frame(width: 7, height: 7)
+                    Text("Visited")
+                        .font(Atlas.Font.sans(14, weight: .medium))
+                        .foregroundColor(Atlas.ink2)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+            }
+
+            Button { showEdit = true } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Atlas.ink)
+                    .frame(width: 52, height: 52)
+                    .background(Atlas.paper)
+                    .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func markVisited(_ r: Restaurant) async {
+        isMarkingVisited = true
+        do {
+            try await appState.markVisited(restaurantId: r.id)
+        } catch {
+            // Error shown through AppState; button re-enables
+        }
+        isMarkingVisited = false
+    }
+}
+
+// MARK: - Stat cell
+
+private struct StatCell: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(value)
+                .font(Atlas.Font.serif(28))
+                .foregroundColor(Atlas.ink)
+            Text(label)
+                .font(Atlas.Font.sans(9.5))
+                .foregroundColor(Atlas.ink3)
+                .kerning(1.4)
+        }
+    }
+}
+
+// MARK: - Edit sheet
+
+private struct EditRestaurantSheet: View {
+    @Environment(AppState.self) private var appState
+    @Binding var isPresented: Bool
+
+    let restaurant: Restaurant
+
+    @State private var name: String
+    @State private var cuisine: String
+    @State private var priceTier: Restaurant.PriceTier
+    @State private var notes: String
+    @State private var selectedVibeTags: Set<String>
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    private let vibes = ["Date night", "Casual", "Brunch", "Group", "Solo",
+                         "Patio", "Late night", "Special occasion",
+                         "Quick bite", "Lively", "Quiet", "Tasting menu"]
+
+    init(restaurant: Restaurant, isPresented: Binding<Bool>) {
+        self.restaurant = restaurant
+        self._isPresented = isPresented
+        self._name = State(initialValue: restaurant.name)
+        self._cuisine = State(initialValue: restaurant.cuisine ?? "")
+        self._priceTier = State(initialValue: restaurant.priceTier ?? .two)
+        self._notes = State(initialValue: restaurant.notes ?? "")
+        self._selectedVibeTags = State(initialValue: Set(restaurant.vibeTags))
+    }
+
+    var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    EditFormField(label: "RESTAURANT NAME") {
+                        TextField("e.g. Kismet", text: $name)
+                            .font(Atlas.Font.serif(18))
+                            .foregroundColor(Atlas.ink)
+                    }
+
+                    Divider().background(Atlas.rule)
+
+                    EditFormField(label: "CUISINE (OPTIONAL)") {
+                        TextField("e.g. Mediterranean", text: $cuisine)
+                            .font(Atlas.Font.sans(15))
+                            .foregroundColor(Atlas.ink)
+                    }
+
+                    Divider().background(Atlas.rule)
+
+                    EditFormField(label: "PRICE RANGE") {
+                        Picker("Price", selection: $priceTier) {
+                            ForEach(Restaurant.PriceTier.allCases, id: \.self) { tier in
+                                Text(tier.rawValue).tag(tier)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    Divider().background(Atlas.rule)
+
+                    EditFormField(label: "VIBE") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(vibes, id: \.self) { vibe in
+                                    FilterChip(label: vibe, isActive: selectedVibeTags.contains(vibe)) {
+                                        if selectedVibeTags.contains(vibe) {
+                                            selectedVibeTags.remove(vibe)
+                                        } else {
+                                            selectedVibeTags.insert(vibe)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider().background(Atlas.rule)
+
+                    EditFormField(label: "NOTE (OPTIONAL)") {
+                        ZStack(alignment: .topLeading) {
+                            if notes.isEmpty {
+                                Text("A little reminder to yourself…")
+                                    .font(Atlas.Font.serif(15, italic: true))
+                                    .foregroundColor(Atlas.ink3)
+                                    .padding(.top, 2)
+                            }
+                            TextEditor(text: $notes)
+                                .font(Atlas.Font.serif(15, italic: true))
+                                .foregroundColor(Atlas.ink)
+                                .frame(minHeight: 80)
+                                .scrollContentBackground(.hidden)
+                                .background(.clear)
+                        }
+                    }
+
+                    if let err = errorMessage {
+                        Text(err)
+                            .font(Atlas.Font.sans(13))
+                            .foregroundColor(Atlas.burnt)
+                            .padding(.horizontal, Atlas.screenHPad)
+                            .padding(.top, 12)
+                    }
+                }
+            }
+            .background(Atlas.paper.ignoresSafeArea())
+            .navigationTitle("Edit restaurant")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isPresented = false }
+                        .font(Atlas.Font.sans(15))
+                        .foregroundColor(Atlas.ink2)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        if isSaving {
+                            ProgressView().tint(Atlas.burnt)
+                        } else {
+                            Text("Save")
+                                .font(Atlas.Font.sans(15, weight: .semibold))
+                                .foregroundColor(Atlas.burnt)
+                        }
+                    }
+                    .disabled(!isValid || isSaving)
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        isSaving = true
+        errorMessage = nil
+        var updated = restaurant
+        updated.name = name.trimmingCharacters(in: .whitespaces)
+        updated.cuisine = cuisine.isEmpty ? nil : cuisine
+        updated.priceTier = priceTier
+        updated.notes = notes.isEmpty ? nil : notes
+        updated.vibeTags = Array(selectedVibeTags)
+        do {
+            try await appState.updateRestaurant(updated)
+            isPresented = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isSaving = false
+    }
+}
+
+private struct EditFormField<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(Atlas.Font.sans(10.5, weight: .medium))
+                .foregroundColor(Atlas.ink3)
+                .kerning(1.6)
+            content()
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.vertical, 16)
+    }
+}
+
+#Preview {
+    let state = AppState.preview
+    return RestaurantDetailView(restaurantId: Restaurant.mockList[0].id)
+        .environment(state)
+}

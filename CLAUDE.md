@@ -19,6 +19,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Root/RootView.swift` | Auth gate and custom tab shell |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows |
+| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited |
 | `Scout/Views/Circles/` | Circle switcher pill, picker sheet, and new circle sheet |
 | `Scout/Views/Shared/` | Shared small UI components and Atlas icons |
 | `Scout/Models/` | Circle, restaurant, visit, and media models |
@@ -191,7 +192,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance |
-| 2 | `RestaurantDetailView` | — | Not yet implemented | Full info card: hero photo, hours, stats, journal preview, top dishes |
+| 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited |
 | 3 | `PickerView` | Pick | Placeholder tab only | Swipe-based matching — both members pick independently, match revealed when both agree |
 | 4 | `MapView` | Map | Placeholder tab only | Full-bleed topo map with named pins; bottom peek card |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
@@ -241,7 +242,7 @@ Phase 1 verified behavior:
 > Make the app genuinely useful day-to-day
 
 - [ ] PlacesService (Apple Places API)
-- [ ] RestaurantDetailView (hours, open now, dishes, rating, photo)
+- [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited; no photos/hours/Places enrichment yet)
 - [ ] MapView (MapKit pins)
 - [ ] Visited tracking + notes + rating
 - [ ] MarkVisitedSheet

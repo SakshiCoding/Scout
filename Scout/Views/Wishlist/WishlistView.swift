@@ -6,6 +6,7 @@ struct WishlistView: View {
     @State private var showAddRestaurant  = false
     @State private var showBulkImport     = false
     @State private var showFilter         = false
+    @State private var selectedRestaurant: Restaurant?
 
     var body: some View {
         ZStack {
@@ -48,6 +49,10 @@ struct WishlistView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.hidden)
                 .presentationCornerRadius(Atlas.sheetTopRadius)
+        }
+        .fullScreenCover(item: $selectedRestaurant) { r in
+            RestaurantDetailView(restaurantId: r.id)
+                .environment(appState)
         }
     }
 
@@ -99,7 +104,10 @@ struct WishlistView: View {
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(appState.filteredRestaurants.enumerated()), id: \.element.id) { i, r in
-                            RestaurantRowView(restaurant: r, index: i + 1)
+                            Button { selectedRestaurant = r } label: {
+                                RestaurantRowView(restaurant: r, index: i + 1)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, Atlas.screenHPad)

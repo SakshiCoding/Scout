@@ -174,9 +174,27 @@ final class SupabaseService {
     }
 
     func updateRestaurant(_ restaurant: Restaurant) async throws {
+        struct Payload: Encodable {
+            let name: String
+            let cuisine: String?
+            let priceTier: String?
+            let notes: String?
+            let vibeTags: [String]
+            enum CodingKeys: String, CodingKey {
+                case name, cuisine, notes
+                case priceTier = "price_tier"
+                case vibeTags  = "vibe_tags"
+            }
+        }
         try await client
             .from("restaurants")
-            .update(restaurant)
+            .update(Payload(
+                name: restaurant.name,
+                cuisine: restaurant.cuisine,
+                priceTier: restaurant.priceTier?.rawValue,
+                notes: restaurant.notes,
+                vibeTags: restaurant.vibeTags
+            ))
             .eq("id", value: restaurant.id)
             .execute()
     }
