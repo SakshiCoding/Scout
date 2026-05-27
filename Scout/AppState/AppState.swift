@@ -34,22 +34,7 @@ final class AppState {
 
     var filteredRestaurants: [Restaurant] {
         let base = restaurants.filter { $0.status == (activeTab == .wantToTry ? .wantToTry : .visited) }
-
-        let filtered = base.filter { r in
-            if let cuisine = filterState.cuisine,
-               r.cuisine?.lowercased() != cuisine.lowercased() { return false }
-            if !filterState.priceTiers.isEmpty,
-               let tier = r.priceTier,
-               !filterState.priceTiers.contains(tier) { return false }
-            if !filterState.vibeTags.isEmpty,
-               filterState.vibeTags.isDisjoint(with: Set(r.vibeTags)) { return false }
-            if let maxDist = filterState.maxDistanceMiles,
-               let dist = r.distanceMiles,
-               dist > maxDist { return false }
-            return true
-        }
-
-        return location.sortedByDistance(filtered)
+        return location.sortedByDistance(base.filter { filterState.matches($0) })
     }
 
     var wantToTryCount: Int { restaurants.filter { $0.status == .wantToTry }.count }
@@ -127,6 +112,11 @@ final class AppState {
         }
     }
 
+    func deleteRestaurant(restaurantId: UUID) async throws {
+        try await supabase.deleteRestaurant(restaurantId)
+        restaurants.removeAll { $0.id == restaurantId }
+    }
+
     func markVisited(restaurantId: UUID) async throws {
         try await supabase.markVisited(restaurantId)
         if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
@@ -145,6 +135,7 @@ final class AppState {
             if isAuthenticated {
                 await loadCircles()
                 location.requestWhenInUse()
+                location.startUpdating()
             }
         }
     }
@@ -172,6 +163,17 @@ struct FilterState {
 
     var isActive: Bool {
         cuisine != nil || !priceTiers.isEmpty || !vibeTags.isEmpty || maxDistanceMiles != nil
+    }
+
+    func matches(_ r: Restaurant) -> Bool {
+        if let cuisine, r.cuisine?.lowercased() != cuisine.lowercased() { return false }
+        if !priceTiers.isEmpty, let tier = r.priceTier,
+           !priceTiers.contains(tier) { return false }
+        if !vibeTags.isEmpty,
+           vibeTags.isDisjoint(with: Set(r.vibeTags)) { return false }
+        if let maxDist = maxDistanceMiles, let dist = r.distanceMiles,
+           dist > maxDist { return false }
+        return true
     }
 
     mutating func reset() {

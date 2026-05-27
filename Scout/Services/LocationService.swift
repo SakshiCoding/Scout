@@ -86,6 +86,10 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        // Location failures are non-fatal — app works without distance sorting
+        guard let clError = error as? CLError, clError.code == .denied else { return }
+        Task { @MainActor in
+            authorizationStatus = manager.authorizationStatus
+            manager.stopUpdatingLocation()
+        }
     }
 }

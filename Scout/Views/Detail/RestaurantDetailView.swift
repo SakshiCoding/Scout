@@ -7,6 +7,8 @@ struct RestaurantDetailView: View {
 
     @State private var showEdit = false
     @State private var isMarkingVisited = false
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
 
     private var restaurant: Restaurant? {
         appState.restaurants.first { $0.id == restaurantId }
@@ -46,6 +48,19 @@ struct RestaurantDetailView: View {
                 EditRestaurantSheet(restaurant: r, isPresented: $showEdit)
                     .presentationCornerRadius(Atlas.sheetTopRadius)
             }
+        }
+        .confirmationDialog(
+            "Delete \(restaurant?.name ?? "this restaurant")?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    if let r = restaurant { await deleteRestaurant(r) }
+                }
+            }
+        } message: {
+            Text("It will be removed from the circle's wishlist.")
         }
     }
 
@@ -258,6 +273,24 @@ struct RestaurantDetailView: View {
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+
+            Button { showDeleteConfirm = true } label: {
+                Group {
+                    if isDeleting {
+                        ProgressView().tint(Atlas.burnt)
+                    } else {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Atlas.burnt)
+                    }
+                }
+                .frame(width: 52, height: 52)
+                .background(Atlas.paper)
+                .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isDeleting)
         }
     }
 
@@ -271,6 +304,16 @@ struct RestaurantDetailView: View {
             // Error shown through AppState; button re-enables
         }
         isMarkingVisited = false
+    }
+
+    private func deleteRestaurant(_ r: Restaurant) async {
+        isDeleting = true
+        do {
+            try await appState.deleteRestaurant(restaurantId: r.id)
+            dismiss()
+        } catch {
+            isDeleting = false
+        }
     }
 }
 
