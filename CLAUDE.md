@@ -194,7 +194,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance |
 | 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited |
 | 3 | `PickerView` | Pick | Placeholder tab only | Swipe-based matching — both members pick independently, match revealed when both agree |
-| 4 | `MapView` | Map | Placeholder tab only | Full-bleed topo map with named pins; bottom peek card |
+| 4 | `MapView` | Map | Implemented | Full-bleed MapKit map with custom Atlas pins, glass header, bottom peek card |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
 | 6 | `JournalIndexView` | Journal | Placeholder tab only | Table of contents for the circle's visit history |
 | 7 | `JournalLocationView` | — | Not yet implemented | Per-restaurant scrapbook with polaroid clusters |
@@ -241,9 +241,9 @@ Phase 1 verified behavior:
 ### Phase 2 — Enrichment & Core Features
 > Make the app genuinely useful day-to-day
 
-- [ ] PlacesService (Apple Places API)
-- [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited; no photos/hours/Places enrichment yet)
-- [ ] MapView (MapKit pins)
+- [x] PlacesService (Apple Places API — name search + geocoding + POI category hints; cuisine autofill deferred to Phase 3)
+- [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited, delete; no photos/hours/Places enrichment yet)
+- [x] MapView (MapKit pins — per-type colors, glass header, peek card, user location, filter wiring)
 - [ ] Visited tracking + notes + rating
 - [ ] MarkVisitedSheet
 - [ ] JournalIndexView
@@ -260,7 +260,8 @@ Phase 1 verified behavior:
 
 - [ ] Share Extension (Safari + Apple Maps)
 - [ ] TikTok Share Extension
-- [ ] GeminiService (Google Gemini API — caption parsing)
+- [ ] GeminiService (Google Gemini API — caption parsing from TikTok/social)
+- [ ] Gemini cuisine + vibe autofill from restaurant name (when Apple Places category is too generic)
 - [ ] ScoutWidget (WidgetKit)
 - [ ] Siri Shortcut
 - [ ] App icon + branding assets
@@ -280,3 +281,13 @@ All mockups are pixel-accurate React/JSX components. Read these when implementin
 | `Scout/designs/Scout-handoff/scout/project/data.jsx` | Mock data shapes + SVG logos |
 | `Scout/SPEC.md` | Full technical spec with screen-by-screen layout details |
 | `Scout/Scout.md` | Product narrative and visual identity |
+
+---
+
+## Known Issues
+
+These bugs are confirmed and need to be fixed:
+
+| Area | Issue | Files |
+|------|-------|-------|
+| Location | `requestWhenInUseAuthorization()` does not trigger the iOS permission dialog when tapped from `locateUser()` in `MapView`. The `.notDetermined` branch calls `location.requestWhenInUse()` but the dialog never appears. Likely needs to be called from a non-async UI context or the OS has already recorded a prior dismissal. Workaround: user must grant permission manually via **Settings → Scout → Location → While Using the App**. | `LocationService.swift`, `MapView.swift` |

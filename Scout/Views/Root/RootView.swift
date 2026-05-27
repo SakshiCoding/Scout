@@ -35,7 +35,7 @@ struct RootView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .list:    WishlistView()
-        case .map:     PlaceholderTabView(tab: "Map", icon: "map", phase: "Phase 2")
+        case .map:     MapView()
         case .pick:    PlaceholderTabView(tab: "Pick for Us", icon: "suit.heart", phase: "Phase 2")
         case .journal: PlaceholderTabView(tab: "Journal", icon: "book.closed", phase: "Phase 2")
         }

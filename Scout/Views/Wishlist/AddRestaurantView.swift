@@ -1,21 +1,45 @@
 import SwiftUI
+import MapKit
 import Supabase
 
 struct AddRestaurantView: View {
     @Environment(AppState.self) private var appState
     @Binding var isPresented: Bool
 
-    @State private var name            = ""
-    @State private var cuisine         = ""
-    @State private var priceTier       = Restaurant.PriceTier.two
-    @State private var notes           = ""
+    @State private var name                  = ""
+    @State private var establishmentType     = Restaurant.EstablishmentType.restaurant
+    @State private var cuisine               = ""
+    @State private var cuisineOtherText      = ""
+    @State private var showCuisineOtherField = false
+    @State private var priceTier             = Restaurant.PriceTier.two
+    @State private var notes                 = ""
     @State private var selectedVibeTags: Set<String> = []
-    @State private var isSaving        = false
+    @State private var isSaving              = false
     @State private var errorMessage: String?
+
+    // Place search
+    @State private var suggestions: [MKMapItem]  = []
+    @State private var selectedMapItem: MKMapItem?
+    @State private var selectedAddress: String?
+    @State private var selectedLat: Double?
+    @State private var selectedLon: Double?
+    @State private var searchTask: Task<Void, Never>?
+
+    private let popularCuisines = [
+        "American", "Italian", "Mexican", "Japanese", "Chinese",
+        "Thai", "Indian", "Mediterranean", "French", "Korean",
+        "Vietnamese", "Greek"
+    ]
 
     private let vibes = ["Date night", "Casual", "Brunch", "Group", "Solo",
                          "Patio", "Late night", "Special occasion",
                          "Quick bite", "Lively", "Quiet", "Tasting menu"]
+
+    private var effectiveCuisine: String? {
+        if establishmentType != .restaurant { return nil }
+        if showCuisineOtherField { return cuisineOtherText.isEmpty ? nil : cuisineOtherText }
+        return cuisine.isEmpty ? nil : cuisine
+    }
 
     var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -24,19 +48,85 @@ struct AddRestaurantView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // Name field
-                    FormField(label: "RESTAURANT NAME") {
+                    FormField(label: "NAME") {
                         TextField("e.g. Kismet", text: $name)
                             .font(Atlas.Font.serif(18))
                             .foregroundColor(Atlas.ink)
                     }
 
+                    // Inline suggestions or selected address chip
+                    if !suggestions.isEmpty && selectedMapItem == nil {
+                        suggestionsView
+                    } else if let addr = selectedAddress {
+                        selectedAddressRow(addr)
+                    }
+
                     Divider().background(Atlas.rule)
 
-                    // Cuisine field
-                    FormField(label: "CUISINE (OPTIONAL)") {
-                        TextField("e.g. Mediterranean", text: $cuisine)
-                            .font(Atlas.Font.sans(15))
-                            .foregroundColor(Atlas.ink)
+                    // Establishment type pills
+                    FormField(label: "TYPE") {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(Restaurant.EstablishmentType.allCases, id: \.self) { type in
+                                    FilterChip(
+                                        label: type.displayName,
+                                        isActive: establishmentType == type
+                                    ) {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            establishmentType = type
+                                            if type != .restaurant {
+                                                cuisine = ""
+                                                cuisineOtherText = ""
+                                                showCuisineOtherField = false
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Cuisine pills — only shown when type is Restaurant
+                    if establishmentType == .restaurant {
+                        Divider().background(Atlas.rule)
+                        FormField(label: "CUISINE (OPTIONAL)") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 6) {
+                                        ForEach(popularCuisines, id: \.self) { c in
+                                            FilterChip(label: c, isActive: !showCuisineOtherField && cuisine == c) {
+                                                withAnimation(.easeInOut(duration: 0.15)) {
+                                                    if cuisine == c {
+                                                        cuisine = ""
+                                                    } else {
+                                                        cuisine = c
+                                                        showCuisineOtherField = false
+                                                        cuisineOtherText = ""
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        FilterChip(label: "Other", isActive: showCuisineOtherField) {
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                showCuisineOtherField.toggle()
+                                                if showCuisineOtherField { cuisine = "" }
+                                                else { cuisineOtherText = "" }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if showCuisineOtherField {
+                                    TextField("Enter cuisine…", text: $cuisineOtherText)
+                                        .font(Atlas.Font.sans(15))
+                                        .foregroundColor(Atlas.ink)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Atlas.paper2)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                }
+                            }
+                        }
                     }
 
                     Divider().background(Atlas.rule)
@@ -125,7 +215,132 @@ struct AddRestaurantView: View {
                 }
             }
         }
+        .onChange(of: name) { _, newValue in
+            handleNameChange(newValue)
+        }
     }
+
+    // MARK: - Suggestions list
+
+    private var suggestionsView: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(suggestions.enumerated()), id: \.offset) { idx, item in
+                Button { selectPlace(item) } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin")
+                            .font(.system(size: 12))
+                            .foregroundColor(Atlas.burnt)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name ?? "")
+                                .font(Atlas.Font.serif(15))
+                                .foregroundColor(Atlas.ink)
+                                .lineLimit(1)
+                            if !item.displayAddress.isEmpty {
+                                Text(item.displayAddress)
+                                    .font(Atlas.Font.sans(12))
+                                    .foregroundColor(Atlas.ink2)
+                            }
+                        }
+                        Spacer()
+                        ChevronRight(color: Atlas.ink3)
+                    }
+                    .padding(.horizontal, Atlas.screenHPad)
+                    .padding(.vertical, 10)
+                    .background(Atlas.paper)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if idx < suggestions.count - 1 {
+                    Divider()
+                        .background(Atlas.rule)
+                        .padding(.leading, Atlas.screenHPad + 28)
+                }
+            }
+        }
+        .background(Atlas.paper2)
+    }
+
+    // MARK: - Selected address chip
+
+    private func selectedAddressRow(_ address: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13))
+                .foregroundColor(Atlas.statusOpen)
+            Text(address)
+                .font(Atlas.Font.sans(12))
+                .foregroundColor(Atlas.ink2)
+                .lineLimit(1)
+            Spacer()
+            Button { clearSelectedPlace() } label: {
+                CloseIcon(color: Atlas.ink3, size: 10)
+                    .frame(width: 24, height: 24)
+                    .background(Atlas.rule)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.vertical, 10)
+        .background(Atlas.paper2)
+    }
+
+    // MARK: - Place search logic
+
+    private func handleNameChange(_ newValue: String) {
+        if let item = selectedMapItem, item.name == newValue { return }
+
+        clearSelectedPlace()
+        searchTask?.cancel()
+
+        guard newValue.count >= 2 else {
+            suggestions = []
+            return
+        }
+
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            suggestions = await PlacesService.shared.search(
+                query: newValue,
+                near: appState.location.userLocation
+            )
+        }
+    }
+
+    private func selectPlace(_ item: MKMapItem) {
+        selectedMapItem = item
+        if let placeName = item.name { name = placeName }
+        let addr = item.displayAddress
+        selectedAddress = addr.isEmpty ? nil : addr
+        selectedLat = item.placemark.coordinate.latitude
+        selectedLon = item.placemark.coordinate.longitude
+
+        if let category = item.pointOfInterestCategory {
+            // Auto-set establishment type from POI category
+            if let detectedType = category.establishmentTypeHint {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    establishmentType = detectedType
+                }
+            }
+            // Auto-apply vibe tags
+            selectedVibeTags.formUnion(category.vibeHints)
+        }
+
+        suggestions = []
+        searchTask?.cancel()
+    }
+
+    private func clearSelectedPlace() {
+        selectedMapItem = nil
+        selectedAddress = nil
+        selectedLat = nil
+        selectedLon = nil
+    }
+
+    // MARK: - Save
 
     private func save() async {
         guard let circleId = appState.activeCircle?.id,
@@ -138,8 +353,12 @@ struct AddRestaurantView: View {
         let restaurant = Restaurant(
             circleId: circleId,
             name: name.trimmingCharacters(in: .whitespaces),
-            cuisine: cuisine.isEmpty ? nil : cuisine,
+            cuisine: effectiveCuisine,
+            establishmentType: establishmentType,
             priceTier: priceTier,
+            address: selectedAddress,
+            latitude: selectedLat,
+            longitude: selectedLon,
             notes: notes.isEmpty ? nil : notes,
             vibeTags: Array(selectedVibeTags),
             addedBy: userId

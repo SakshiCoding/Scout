@@ -71,19 +71,21 @@ final class SupabaseService {
         let restaurantVibeTags: [String]
         let restaurantRating: Double?
         let restaurantPhotoUrl: String?
+        let restaurantEstablishmentType: String
 
         enum CodingKeys: String, CodingKey {
-            case restaurantCircleId  = "restaurant_circle_id"
-            case restaurantName      = "restaurant_name"
-            case restaurantCuisine   = "restaurant_cuisine"
-            case restaurantPriceTier = "restaurant_price_tier"
-            case restaurantAddress   = "restaurant_address"
-            case restaurantLatitude  = "restaurant_latitude"
-            case restaurantLongitude = "restaurant_longitude"
-            case restaurantNotes     = "restaurant_notes"
-            case restaurantVibeTags  = "restaurant_vibe_tags"
-            case restaurantRating    = "restaurant_rating"
-            case restaurantPhotoUrl  = "restaurant_photo_url"
+            case restaurantCircleId          = "restaurant_circle_id"
+            case restaurantName              = "restaurant_name"
+            case restaurantCuisine           = "restaurant_cuisine"
+            case restaurantPriceTier         = "restaurant_price_tier"
+            case restaurantAddress           = "restaurant_address"
+            case restaurantLatitude          = "restaurant_latitude"
+            case restaurantLongitude         = "restaurant_longitude"
+            case restaurantNotes             = "restaurant_notes"
+            case restaurantVibeTags          = "restaurant_vibe_tags"
+            case restaurantRating            = "restaurant_rating"
+            case restaurantPhotoUrl          = "restaurant_photo_url"
+            case restaurantEstablishmentType = "restaurant_establishment_type"
         }
     }
 
@@ -151,7 +153,8 @@ final class SupabaseService {
                     restaurantNotes: restaurant.notes,
                     restaurantVibeTags: restaurant.vibeTags,
                     restaurantRating: restaurant.rating,
-                    restaurantPhotoUrl: restaurant.photoUrl
+                    restaurantPhotoUrl: restaurant.photoUrl,
+                    restaurantEstablishmentType: restaurant.establishmentType.rawValue
                 )
             )
             .execute()
@@ -180,10 +183,12 @@ final class SupabaseService {
             let priceTier: String?
             let notes: String?
             let vibeTags: [String]
+            let establishmentType: String
             enum CodingKeys: String, CodingKey {
                 case name, cuisine, notes
-                case priceTier = "price_tier"
-                case vibeTags  = "vibe_tags"
+                case priceTier        = "price_tier"
+                case vibeTags         = "vibe_tags"
+                case establishmentType = "establishment_type"
             }
         }
         try await client
@@ -193,9 +198,22 @@ final class SupabaseService {
                 cuisine: restaurant.cuisine,
                 priceTier: restaurant.priceTier?.rawValue,
                 notes: restaurant.notes,
-                vibeTags: restaurant.vibeTags
+                vibeTags: restaurant.vibeTags,
+                establishmentType: restaurant.establishmentType.rawValue
             ))
             .eq("id", value: restaurant.id)
+            .execute()
+    }
+
+    func deleteRestaurant(_ id: UUID) async throws {
+        struct Params: Encodable {
+            let restaurantId: UUID
+            enum CodingKeys: String, CodingKey {
+                case restaurantId = "restaurant_id"
+            }
+        }
+        try await client
+            .rpc("delete_restaurant", params: Params(restaurantId: id))
             .execute()
     }
 
