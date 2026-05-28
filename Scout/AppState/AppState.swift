@@ -124,6 +124,40 @@ final class AppState {
         }
     }
 
+    func saveVisit(
+        for restaurant: Restaurant,
+        visitedAt: Date,
+        notes: String?,
+        rating: Double?
+    ) async throws {
+        guard let userId = currentUser?.id else {
+            throw NSError(
+                domain: "Scout",
+                code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "Sign in again before saving a visit."]
+            )
+        }
+
+        let visit = Visit(
+            restaurantId: restaurant.id,
+            circleId: restaurant.circleId,
+            userId: userId,
+            visitedAt: visitedAt,
+            notes: notes,
+            rating: rating
+        )
+
+        _ = try await supabase.addVisit(visit)
+        try await supabase.markVisited(restaurant.id, rating: rating)
+
+        if let idx = restaurants.firstIndex(where: { $0.id == restaurant.id }) {
+            restaurants[idx].status = .visited
+            if let rating {
+                restaurants[idx].rating = rating
+            }
+        }
+    }
+
     // MARK: - Private
 
     private func observeAuth() {

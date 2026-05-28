@@ -27,14 +27,16 @@ final class SupabaseService {
     // MARK: - Date decoder shared across all fetches
     static let decoder: JSONDecoder = {
         let d = JSONDecoder()
-        // PostgREST returns ISO 8601 with timezone, sometimes with fractional seconds
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let fallback = ISO8601DateFormatter()
-        fallback.formatOptions = [.withInternetDateTime]
         d.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let str = try container.decode(String.self)
+
+            // PostgREST returns ISO 8601 with timezone, sometimes with fractional seconds.
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let fallback = ISO8601DateFormatter()
+            fallback.formatOptions = [.withInternetDateTime]
+
             if let date = formatter.date(from: str) { return date }
             if let date = fallback.date(from: str)  { return date }
             throw DecodingError.dataCorruptedError(
@@ -94,6 +96,44 @@ final class SupabaseService {
 
         enum CodingKeys: String, CodingKey {
             case targetCircleId = "target_circle_id"
+        }
+    }
+
+    private struct AddVisitParams: Encodable {
+        struct VisitPayload: Encodable {
+            let visitedAt: Date
+            let notes: String?
+            let rating: Double?
+
+            enum CodingKeys: String, CodingKey {
+                case visitedAt = "visited_at"
+                case notes
+                case rating
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(visitedAt, forKey: .visitedAt)
+                try container.encodeNullable(notes, forKey: .notes)
+                try container.encodeNullable(rating, forKey: .rating)
+            }
+        }
+
+        let targetRestaurantId: UUID
+        let visitCircleId: UUID
+        let visitPayload: VisitPayload
+
+        enum CodingKeys: String, CodingKey {
+            case targetRestaurantId = "target_restaurant_id"
+            case visitCircleId      = "visit_circle_id"
+            case visitPayload       = "visit_payload"
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(targetRestaurantId, forKey: .targetRestaurantId)
+            try container.encode(visitCircleId, forKey: .visitCircleId)
+            try container.encode(visitPayload, forKey: .visitPayload)
         }
     }
 
@@ -181,22 +221,42 @@ final class SupabaseService {
             let name: String
             let cuisine: String?
             let priceTier: String?
+            let address: String?
+            let latitude: Double?
+            let longitude: Double?
             let notes: String?
             let vibeTags: [String]
             let establishmentType: String
             enum CodingKeys: String, CodingKey {
-                case name, cuisine, notes
+                case name, cuisine, address, latitude, longitude, notes
                 case priceTier        = "price_tier"
                 case vibeTags         = "vibe_tags"
                 case establishmentType = "establishment_type"
             }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(name, forKey: .name)
+                try container.encodeNullable(cuisine, forKey: .cuisine)
+                try container.encodeNullable(priceTier, forKey: .priceTier)
+                try container.encodeNullable(address, forKey: .address)
+                try container.encodeNullable(latitude, forKey: .latitude)
+                try container.encodeNullable(longitude, forKey: .longitude)
+                try container.encodeNullable(notes, forKey: .notes)
+                try container.encode(vibeTags, forKey: .vibeTags)
+                try container.encode(establishmentType, forKey: .establishmentType)
+            }
         }
+
         try await client
             .from("restaurants")
             .update(Payload(
                 name: restaurant.name,
                 cuisine: restaurant.cuisine,
                 priceTier: restaurant.priceTier?.rawValue,
+                address: restaurant.address,
+                latitude: restaurant.latitude,
+                longitude: restaurant.longitude,
                 notes: restaurant.notes,
                 vibeTags: restaurant.vibeTags,
                 establishmentType: restaurant.establishmentType.rawValue
@@ -217,10 +277,15 @@ final class SupabaseService {
             .execute()
     }
 
-    func markVisited(_ restaurantId: UUID) async throws {
+    func markVisited(_ restaurantId: UUID, rating: Double? = nil) async throws {
+        struct Payload: Encodable {
+            let status: String
+            let rating: Double?
+        }
+
         try await client
             .from("restaurants")
-            .update(["status": "visited"])
+            .update(Payload(status: "visited", rating: rating))
             .eq("id", value: restaurantId)
             .execute()
     }
@@ -228,11 +293,19 @@ final class SupabaseService {
     // MARK: - Visits
 
     func addVisit(_ visit: Visit) async throws -> Visit {
-        try await client
-            .from("visits")
-            .insert(visit)
-            .select()
-            .single()
+        return try await client
+            .rpc(
+                "add_visit",
+                params: AddVisitParams(
+                    targetRestaurantId: visit.restaurantId,
+                    visitCircleId: visit.circleId,
+                    visitPayload: AddVisitParams.VisitPayload(
+                        visitedAt: visit.visitedAt,
+                        notes: visit.notes,
+                        rating: visit.rating
+                    )
+                )
+            )
             .execute()
             .value
     }
@@ -250,5 +323,15 @@ final class SupabaseService {
             .from("profiles")
             .upsert(payload)
             .execute()
+    }
+}
+
+private extension KeyedEncodingContainer {
+    mutating func encodeNullable<T: Encodable>(_ value: T?, forKey key: Key) throws {
+        if let value {
+            try encode(value, forKey: key)
+        } else {
+            try encodeNil(forKey: key)
+        }
     }
 }
