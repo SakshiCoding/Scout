@@ -135,7 +135,6 @@ struct PickerView: View {
     @State private var session: PickSession?
     @State private var dragOffset: CGSize = .zero
     @State private var matchedRestaurant: Restaurant?  // drives the fullScreenCover
-    @State private var activeMatch: Restaurant?         // persists on-tab after MatchView closes
 
     private let swipeThreshold: CGFloat = 90
     private let cardW: CGFloat = 310
@@ -147,7 +146,7 @@ struct PickerView: View {
             VStack(spacing: 0) {
                 headerBar
                 if let circle = appState.activeCircle {
-                    if let match = activeMatch {
+                    if let match = appState.activePickMatch {
                         matchedView(restaurant: match, circle: circle)
                     } else if let s = session, !s.queue.isEmpty {
                         if s.isComplete {
@@ -165,7 +164,7 @@ struct PickerView: View {
         }
         .onAppear { startSession() }
         .onChange(of: appState.activeCircle?.id) { _, _ in
-            activeMatch = nil
+            appState.activePickMatch = nil
             startSession()
         }
         .sheet(isPresented: $showCirclePicker) {
@@ -182,11 +181,11 @@ struct PickerView: View {
                     onConfirm: {
                         let r = restaurant
                         matchedRestaurant = nil
-                        activeMatch = r          // stay on match; don't start a new session
+                        appState.activePickMatch = r          // stay on match; don't start a new session
                     },
                     onPickAgain: {
                         matchedRestaurant = nil
-                        activeMatch = nil
+                        appState.activePickMatch = nil
                         startSession()
                     }
                 )
@@ -202,7 +201,7 @@ struct PickerView: View {
                 CircleSwitcherPill(circle: circle, onTap: { showCirclePicker = true })
             }
             Spacer()
-            if activeMatch != nil {
+            if appState.activePickMatch != nil {
                 rematchButton
             } else if let s = session, !s.isComplete, !s.queue.isEmpty {
                 Text("Round \(s.currentIndex + 1) of \(s.totalCount)")
@@ -216,7 +215,7 @@ struct PickerView: View {
 
     private var rematchButton: some View {
         Button {
-            activeMatch = nil
+            appState.activePickMatch = nil
             startSession()
         } label: {
             ZStack {

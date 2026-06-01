@@ -21,6 +21,9 @@ final class AppState {
     var activeTab: WishlistTab = .wantToTry
     var filterState = FilterState()
 
+    // MARK: - Pick UI state (survives tab switches)
+    var activePickMatch: Restaurant?
+
     // MARK: - Services
     let supabase  = SupabaseService.shared
     let auth      = AuthService()
