@@ -15,12 +15,12 @@ alter table public.picks enable row level security;
 
 create policy "Circle members can view picks"
   on public.picks for select
-  using (is_circle_member(circle_id, auth.uid()));
+  using (is_circle_member(circle_id));
 
 create policy "Circle members can insert picks"
   on public.picks for insert
-  with check (is_circle_member(circle_id, auth.uid()));
+  with check (is_circle_member(circle_id));
 
 create policy "Circle members can update picks"
   on public.picks for update
-  using (is_circle_member(circle_id, auth.uid()));
+  using (is_circle_member(circle_id));
