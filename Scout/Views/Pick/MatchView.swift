@@ -3,7 +3,8 @@ import SwiftUI
 struct MatchView: View {
     let restaurant: Restaurant
     let circle: ScoutCircle
-    var onDismiss: () -> Void
+    var onConfirm: () -> Void
+    var onPickAgain: () -> Void
 
     @State private var appeared = false
 
@@ -166,7 +167,7 @@ struct MatchView: View {
 
     private var ctaStack: some View {
         VStack(spacing: 12) {
-            Button { onDismiss() } label: {
+            Button { onConfirm() } label: {
                 Text("Great, let's go!")
                     .font(Atlas.Font.sans(14.5, weight: .semibold))
                     .foregroundColor(Atlas.paper)
@@ -177,7 +178,7 @@ struct MatchView: View {
             }
             .buttonStyle(.plain)
 
-            Button { onDismiss() } label: {
+            Button { onPickAgain() } label: {
                 Text("Pick again")
                     .font(Atlas.Font.sans(14, weight: .medium))
                     .foregroundColor(Atlas.ink2)
@@ -194,6 +195,7 @@ struct MatchView: View {
     MatchView(
         restaurant: Restaurant.mockList[0],
         circle: .mockMorgan,
-        onDismiss: {}
+        onConfirm: {},
+        onPickAgain: {}
     )
 }
