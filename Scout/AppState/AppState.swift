@@ -133,16 +133,13 @@ final class AppState {
         guard let userId = currentUser?.id,
               let circleId = activeCircle?.id else { return }
 
-        // Critical: mark status visited. Throws on failure so the sheet stays open.
         try await supabase.markVisited(restaurantId)
 
-        // Update local state immediately so the UI reflects visited even if secondary writes fail.
         if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
             restaurants[idx].status = .visited
             if let rating { restaurants[idx].rating = rating }
         }
 
-        // Non-critical: silently no-op on failure.
         if let rating {
             try? await supabase.updateRestaurantRating(restaurantId, rating: rating)
         }

@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 struct RestaurantDetailView: View {
     let restaurantId: UUID
@@ -336,7 +337,14 @@ private struct EditRestaurantSheet: View {
 
     @State private var name: String
     @State private var cuisine: String
+    @State private var establishmentType: Restaurant.EstablishmentType
     @State private var priceTier: Restaurant.PriceTier
+    @State private var suggestions: [MKMapItem]
+    @State private var selectedMapItem: MKMapItem?
+    @State private var selectedAddress: String?
+    @State private var selectedLat: Double?
+    @State private var selectedLon: Double?
+    @State private var searchTask: Task<Void, Never>?
     @State private var notes: String
     @State private var selectedVibeTags: Set<String>
     @State private var isSaving = false
@@ -351,7 +359,12 @@ private struct EditRestaurantSheet: View {
         self._isPresented = isPresented
         self._name = State(initialValue: restaurant.name)
         self._cuisine = State(initialValue: restaurant.cuisine ?? "")
+        self._establishmentType = State(initialValue: restaurant.establishmentType)
         self._priceTier = State(initialValue: restaurant.priceTier ?? .two)
+        self._suggestions = State(initialValue: [])
+        self._selectedAddress = State(initialValue: restaurant.address)
+        self._selectedLat = State(initialValue: restaurant.latitude)
+        self._selectedLon = State(initialValue: restaurant.longitude)
         self._notes = State(initialValue: restaurant.notes ?? "")
         self._selectedVibeTags = State(initialValue: Set(restaurant.vibeTags))
     }
@@ -366,6 +379,12 @@ private struct EditRestaurantSheet: View {
                         TextField("e.g. Kismet", text: $name)
                             .font(Atlas.Font.serif(18))
                             .foregroundColor(Atlas.ink)
+                    }
+
+                    if !suggestions.isEmpty && selectedMapItem == nil {
+                        suggestionsView
+                    } else if let addr = selectedAddress {
+                        selectedAddressRow(addr)
                     }
 
                     Divider().background(Atlas.rule)
@@ -458,6 +477,129 @@ private struct EditRestaurantSheet: View {
                 }
             }
         }
+        .onChange(of: name) { _, newValue in
+            handleNameChange(newValue)
+        }
+        .task {
+            searchForPlace(named: name)
+        }
+    }
+
+    private var suggestionsView: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(suggestions.enumerated()), id: \.offset) { idx, item in
+                Button { selectPlace(item) } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin")
+                            .font(.system(size: 12))
+                            .foregroundColor(Atlas.burnt)
+                            .frame(width: 16)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name ?? "")
+                                .font(Atlas.Font.serif(15))
+                                .foregroundColor(Atlas.ink)
+                                .lineLimit(1)
+                            if !item.displayAddress.isEmpty {
+                                Text(item.displayAddress)
+                                    .font(Atlas.Font.sans(12))
+                                    .foregroundColor(Atlas.ink2)
+                            }
+                        }
+                        Spacer()
+                        ChevronRight(color: Atlas.ink3)
+                    }
+                    .padding(.horizontal, Atlas.screenHPad)
+                    .padding(.vertical, 10)
+                    .background(Atlas.paper)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if idx < suggestions.count - 1 {
+                    Divider()
+                        .background(Atlas.rule)
+                        .padding(.leading, Atlas.screenHPad + 28)
+                }
+            }
+        }
+        .background(Atlas.paper2)
+    }
+
+    private func selectedAddressRow(_ address: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13))
+                .foregroundColor(Atlas.statusOpen)
+            Text(address)
+                .font(Atlas.Font.sans(12))
+                .foregroundColor(Atlas.ink2)
+                .lineLimit(1)
+            Spacer()
+            Button {
+                clearSelectedPlace()
+                searchForPlace(named: name)
+            } label: {
+                CloseIcon(color: Atlas.ink3, size: 10)
+                    .frame(width: 24, height: 24)
+                    .background(Atlas.rule)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.vertical, 10)
+        .background(Atlas.paper2)
+    }
+
+    private func handleNameChange(_ newValue: String) {
+        if let item = selectedMapItem, item.name == newValue { return }
+
+        clearSelectedPlace()
+        searchForPlace(named: newValue)
+    }
+
+    private func searchForPlace(named name: String) {
+        searchTask?.cancel()
+
+        guard name.count >= 2 else {
+            suggestions = []
+            return
+        }
+
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            suggestions = await PlacesService.shared.search(
+                query: name,
+                near: appState.location.userLocation
+            )
+        }
+    }
+
+    private func selectPlace(_ item: MKMapItem) {
+        selectedMapItem = item
+        if let placeName = item.name { name = placeName }
+        let addr = item.displayAddress
+        selectedAddress = addr.isEmpty ? nil : addr
+        selectedLat = item.placemark.coordinate.latitude
+        selectedLon = item.placemark.coordinate.longitude
+
+        if let category = item.pointOfInterestCategory {
+            if let detectedType = category.establishmentTypeHint {
+                establishmentType = detectedType
+            }
+            selectedVibeTags.formUnion(category.vibeHints)
+        }
+
+        suggestions = []
+        searchTask?.cancel()
+    }
+
+    private func clearSelectedPlace() {
+        selectedMapItem = nil
+        selectedAddress = nil
+        selectedLat = nil
+        selectedLon = nil
     }
 
     private func save() async {
@@ -466,7 +608,11 @@ private struct EditRestaurantSheet: View {
         var updated = restaurant
         updated.name = name.trimmingCharacters(in: .whitespaces)
         updated.cuisine = cuisine.isEmpty ? nil : cuisine
+        updated.establishmentType = establishmentType
         updated.priceTier = priceTier
+        updated.address = selectedAddress
+        updated.latitude = selectedLat
+        updated.longitude = selectedLon
         updated.notes = notes.isEmpty ? nil : notes
         updated.vibeTags = Array(selectedVibeTags)
         do {

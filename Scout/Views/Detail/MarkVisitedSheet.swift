@@ -182,7 +182,6 @@ struct MarkVisitedSheet: View {
                 .kerning(1.6)
 
             HStack(alignment: .top, spacing: 8) {
-                // Loaded thumbnails
                 ForEach(Array(selectedImages.enumerated()), id: \.offset) { idx, image in
                     ZStack(alignment: .topTrailing) {
                         Image(uiImage: image)
@@ -207,7 +206,6 @@ struct MarkVisitedSheet: View {
                     }
                 }
 
-                // Add tile — hidden when at max 3
                 if selectedImages.count < 3 {
                     PhotosPicker(
                         selection: $pickerItems,
