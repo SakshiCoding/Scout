@@ -19,7 +19,8 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Root/RootView.swift` | Auth gate and custom tab shell |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows |
-| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited |
+| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button |
+| `Scout/Views/Detail/MarkVisitedSheet.swift` | Bottom sheet for logging a visit: circle kicker, restaurant heading, 1–5 star rating, italic note field, Save/Skip CTAs |
 | `Scout/Views/Circles/` | Circle switcher pill, picker sheet, and new circle sheet |
 | `Scout/Views/Shared/` | Shared small UI components and Atlas icons |
 | `Scout/Models/` | Circle, restaurant, visit, and media models |
@@ -200,7 +201,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 7 | `JournalLocationView` | — | Not yet implemented | Per-restaurant scrapbook with polaroid clusters |
 | 8 | `JournalComposeView` | — | Not yet implemented | New journal entry: photos, date, occasion, note, vibe tags |
 | 9 | `JournalViewerView` | — | Not yet implemented | Fullscreen photo/video viewer with caption block |
-| 10 | `MarkVisitedSheet` | — | Not yet implemented | Auto-prompted after "Mark as visited" — capture media + note while fresh |
+| 10 | `MarkVisitedSheet` | — | Implemented | Auto-prompted after "Mark as visited" — 1–5 star rating + visit note; "Save to journal" creates a Visit record, "Skip for now" marks visited only |
 | 11 | `CrossPostSheet` | — | Not yet implemented | Share a journal photo/video to another circle or externally |
 
 ### Key layout rules across all screens
@@ -244,8 +245,8 @@ Phase 1 verified behavior:
 - [x] PlacesService (Apple Places API — name search + geocoding + POI category hints; cuisine autofill deferred to Phase 3)
 - [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited, delete; no photos/hours/Places enrichment yet)
 - [x] MapView (MapKit pins — per-type colors, glass header, peek card, user location, filter wiring)
-- [ ] Visited tracking + notes + rating
-- [ ] MarkVisitedSheet
+- [x] Visited tracking + notes + rating (`markVisitedWithRecord` in AppState; writes Visit row + updates restaurant rating)
+- [x] MarkVisitedSheet (star rating, visit note, Save/Skip; auto-shown after "Mark as visited")
 - [ ] JournalIndexView
 - [ ] JournalLocationView
 - [ ] JournalComposeView

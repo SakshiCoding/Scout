@@ -6,7 +6,7 @@ struct RestaurantDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showEdit = false
-    @State private var isMarkingVisited = false
+    @State private var showMarkVisited = false
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
 
@@ -46,6 +46,13 @@ struct RestaurantDetailView: View {
         .sheet(isPresented: $showEdit) {
             if let r = restaurant {
                 EditRestaurantSheet(restaurant: r, isPresented: $showEdit)
+                    .presentationCornerRadius(Atlas.sheetTopRadius)
+            }
+        }
+        .sheet(isPresented: $showMarkVisited) {
+            if let r = restaurant {
+                MarkVisitedSheet(isPresented: $showMarkVisited, restaurant: r)
+                    .presentationDetents([.medium, .large])
                     .presentationCornerRadius(Atlas.sheetTopRadius)
             }
         }
@@ -231,24 +238,17 @@ struct RestaurantDetailView: View {
         HStack(spacing: 10) {
             if r.status == .wantToTry {
                 Button {
-                    Task { await markVisited(r) }
+                    showMarkVisited = true
                 } label: {
-                    Group {
-                        if isMarkingVisited {
-                            ProgressView().tint(Atlas.paper)
-                        } else {
-                            Text("Mark as visited")
-                                .font(Atlas.Font.sans(14.5, weight: .semibold))
-                                .foregroundColor(Atlas.paper)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Atlas.ink)
-                    .clipShape(Capsule())
+                    Text("Mark as visited")
+                        .font(Atlas.Font.sans(14.5, weight: .semibold))
+                        .foregroundColor(Atlas.paper)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Atlas.ink)
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .disabled(isMarkingVisited)
             } else {
                 HStack(spacing: 6) {
                     Circle()
@@ -295,16 +295,6 @@ struct RestaurantDetailView: View {
     }
 
     // MARK: - Actions
-
-    private func markVisited(_ r: Restaurant) async {
-        isMarkingVisited = true
-        do {
-            try await appState.markVisited(restaurantId: r.id)
-        } catch {
-            // Error shown through AppState; button re-enables
-        }
-        isMarkingVisited = false
-    }
 
     private func deleteRestaurant(_ r: Restaurant) async {
         isDeleting = true

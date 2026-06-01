@@ -124,6 +124,49 @@ final class AppState {
         }
     }
 
+    func markVisitedWithRecord(
+        restaurantId: UUID,
+        rating: Double?,
+        visitNote: String?,
+        photos: [Data] = []
+    ) async throws {
+        guard let userId = currentUser?.id,
+              let circleId = activeCircle?.id else { return }
+
+        // Critical: mark status visited. Throws on failure so the sheet stays open.
+        try await supabase.markVisited(restaurantId)
+
+        // Update local state immediately so the UI reflects visited even if secondary writes fail.
+        if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
+            restaurants[idx].status = .visited
+            if let rating { restaurants[idx].rating = rating }
+        }
+
+        // Non-critical: silently no-op on failure.
+        if let rating {
+            try? await supabase.updateRestaurantRating(restaurantId, rating: rating)
+        }
+        let visit = Visit(
+            restaurantId: restaurantId,
+            circleId: circleId,
+            userId: userId,
+            visitedAt: Date(),
+            notes: visitNote,
+            rating: rating
+        )
+        let savedVisit = try? await supabase.addVisit(visit)
+        if !photos.isEmpty {
+            let visitId = savedVisit?.id ?? visit.id
+            try? await supabase.uploadVisitPhotos(
+                photos,
+                visitId: visitId,
+                restaurantId: restaurantId,
+                circleId: circleId,
+                userId: userId
+            )
+        }
+    }
+
     // MARK: - Private
 
     private func observeAuth() {

@@ -218,9 +218,21 @@ final class SupabaseService {
     }
 
     func markVisited(_ restaurantId: UUID) async throws {
+        struct Params: Encodable {
+            let restaurantId: UUID
+            enum CodingKeys: String, CodingKey {
+                case restaurantId = "restaurant_id"
+            }
+        }
+        try await client
+            .rpc("mark_visited", params: Params(restaurantId: restaurantId))
+            .execute()
+    }
+
+    func updateRestaurantRating(_ restaurantId: UUID, rating: Double) async throws {
         try await client
             .from("restaurants")
-            .update(["status": "visited"])
+            .update(["rating": rating])
             .eq("id", value: restaurantId)
             .execute()
     }
@@ -235,6 +247,58 @@ final class SupabaseService {
             .single()
             .execute()
             .value
+    }
+
+    // MARK: - Media
+
+    func uploadVisitPhotos(
+        _ photos: [Data],
+        visitId: UUID,
+        restaurantId: UUID,
+        circleId: UUID,
+        userId: UUID
+    ) async throws {
+        let bucket = client.storage.from("scout-media")
+
+        for photoData in photos {
+            let photoId = UUID().uuidString
+            let path = "circles/\(circleId)/visits/\(visitId)/\(photoId).jpg"
+
+            _ = try await bucket.upload(
+                path,
+                data: photoData,
+                options: FileOptions(contentType: "image/jpeg")
+            )
+
+            struct MediaInsert: Encodable {
+                let restaurantId: UUID
+                let visitId: UUID
+                let circleId: UUID
+                let userId: UUID
+                let storagePath: String
+                let mediaType: String
+                enum CodingKeys: String, CodingKey {
+                    case restaurantId = "restaurant_id"
+                    case visitId      = "visit_id"
+                    case circleId     = "circle_id"
+                    case userId       = "user_id"
+                    case storagePath  = "storage_path"
+                    case mediaType    = "media_type"
+                }
+            }
+
+            try await client
+                .from("media")
+                .insert(MediaInsert(
+                    restaurantId: restaurantId,
+                    visitId: visitId,
+                    circleId: circleId,
+                    userId: userId,
+                    storagePath: path,
+                    mediaType: "photo"
+                ))
+                .execute()
+        }
     }
 
     // MARK: - Profiles
