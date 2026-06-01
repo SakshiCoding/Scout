@@ -13,8 +13,8 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | File | Status |
 |------|--------|
 | `Scout/ScoutApp.swift` | App entry point; creates and injects `AppState` |
-| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, and services |
-| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/profile methods; circles/restaurants use RPC functions |
+| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, services, and pick match persistence (`activePickMatch`, `savePickMatch`, `clearPickMatch`, `restorePickMatch`) |
+| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/profile/pick methods; circles/restaurants use RPC functions; picks use direct table access (`savePick`, `fetchTodayPick`) |
 | `Scout/Services/AuthService.swift` | Auth session handling and sign-in flows |
 | `Scout/Services/LocationService.swift` | Location permissions and distance sorting |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
@@ -178,7 +178,7 @@ Scout/
 
 ## Supabase Schema (tables)
 
-`profiles` · `circles` · `circle_members` · `restaurants` · `visits` · `media`
+`profiles` · `circles` · `circle_members` · `restaurants` · `visits` · `media` · `picks`
 
 The schema lives in `supabase/migrations/`. Current circle and restaurant creation/loading use Supabase RPC functions to avoid client-side RLS timing issues:
 
@@ -198,7 +198,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 |---|-----------|-----|--------|---------|
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance |
 | 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited |
-| 3 | `PickerView` + `MatchView` | Pick | Implemented (Phase 2) | Swipe-based pick: `PickSession` draws a deterministic deck of 3 restaurants (seeded by circleId + calendar date + time-of-day so all circle members see the same set); time-of-day filtering via `establishmentType` (morning/lunch/dinner windows); SF-Symbol heart badge on yes button; simulated partner progress; on mutual match `MatchView` animates in; post-match: Pick tab shows matched restaurant persistently with a shuffle rematch button top-trailing; `MatchView` has `onConfirm`/`onPickAgain` callbacks |
+| 3 | `PickerView` + `MatchView` | Pick | Implemented (Phase 2) | Swipe-based pick: `PickSession` draws a deterministic deck of 3 restaurants (seeded by circleId + calendar date + time-of-day so all circle members see the same set); time-of-day filtering via `establishmentType` (morning/lunch/dinner windows); SF-Symbol heart badge on yes button; simulated partner progress; on mutual match `MatchView` animates in; post-match: Pick tab shows matched restaurant persistently with a shuffle rematch button top-trailing; match saved to Supabase `picks` table (one per circle per day) + UserDefaults offline cache; `MatchView` has `onConfirm`/`onPickAgain` callbacks |
 | 4 | `MapView` | Map | Implemented | Full-bleed MapKit map with custom Atlas pins, glass header, bottom peek card |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
 | 6 | `JournalIndexView` | Journal | Placeholder tab only | Table of contents for the circle's visit history |
@@ -256,7 +256,7 @@ Phase 1 verified behavior:
 - [ ] JournalComposeView
 - [ ] JournalViewerView
 - [ ] CrossPostSheet
-- [x] PickerView + MatchView (local session, simulated partner; real-time Supabase Realtime sync deferred to future phase)
+- [x] PickerView + MatchView (local session, simulated partner; match result persisted to Supabase `picks` table + UserDefaults cache; real-time partner sync deferred to future phase)
 - [ ] MediaService (photo/video capture)
 - [ ] Reservation deep links (OpenTable/Resy)
 
