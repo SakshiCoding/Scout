@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
 struct MarkVisitedSheet: View {
     @Environment(AppState.self) private var appState
@@ -6,213 +8,279 @@ struct MarkVisitedSheet: View {
 
     let restaurant: Restaurant
 
-    @State private var visitedAt = Date()
-    @State private var rating: Double?
-    @State private var note = ""
+    @State private var selectedRating: Int = 0
+    @State private var visitNote: String = ""
     @State private var isSaving = false
+    @State private var isSkipping = false
     @State private var errorMessage: String?
 
-    private var circle: ScoutCircle? { appState.activeCircle }
-    private var circleName: String { circle?.displayShortName ?? "this circle" }
-    private var accent: Color { circle?.accentSwiftUIColor ?? Atlas.burnt }
+    // Photos
+    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var selectedImages: [UIImage] = []
+    @State private var isLoadingPhotos = false
+
+    private var tileSide: CGFloat {
+        (UIScreen.main.bounds.width - 2 * Atlas.screenHPad - 3 * 8) / 4
+    }
 
     var body: some View {
-        NavigationStack {
+        VStack(alignment: .leading, spacing: 0) {
+            dragHandle
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Capsule()
-                        .fill(Atlas.rule)
-                        .frame(width: 44, height: 4)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 12)
-                        .padding(.bottom, 18)
-
-                    header
-                        .padding(.horizontal, Atlas.screenHPad)
-
-                    mediaTray
-                        .padding(.horizontal, Atlas.screenHPad)
-                        .padding(.top, 20)
-
-                    visitDetails
-                        .padding(.horizontal, Atlas.screenHPad)
-                        .padding(.top, 18)
-
-                    noteField
-                        .padding(.horizontal, Atlas.screenHPad)
-                        .padding(.top, 16)
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(Atlas.Font.sans(13))
-                            .foregroundColor(Atlas.burnt)
-                            .padding(.horizontal, Atlas.screenHPad)
-                            .padding(.top, 12)
-                    }
-
-                    actionRow
-                        .padding(.horizontal, Atlas.screenHPad)
-                        .padding(.top, 20)
-                        .padding(.bottom, 28)
+                    kicker
+                    heading
+                    subtitle
+                    ratingSection
+                    photoTraySection
+                    noteSection
+                    Spacer().frame(height: 32)
                 }
+                .padding(.horizontal, Atlas.screenHPad)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .background(Atlas.paper.ignoresSafeArea())
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .navigationBar)
+
+            ctaButtons
+                .padding(.horizontal, Atlas.screenHPad)
+                .padding(.bottom, 40)
+        }
+        .background(Atlas.paper.ignoresSafeArea())
+        .onChange(of: isPresented) { _, newValue in
+            if newValue { errorMessage = nil }
+        }
+        .onChange(of: pickerItems) { _, items in
+            guard !items.isEmpty else { return }
+            isLoadingPhotos = true
+            Task {
+                var loaded = [UIImage?](repeating: nil, count: items.count)
+                await withTaskGroup(of: (Int, UIImage?).self) { group in
+                    for (i, item) in items.enumerated() {
+                        group.addTask {
+                            let data = try? await item.loadTransferable(type: Data.self)
+                            return (i, data.flatMap { UIImage(data: $0) })
+                        }
+                    }
+                    for await (i, img) in group { loaded[i] = img }
+                }
+                selectedImages = loaded.compactMap { $0 }
+                isLoadingPhotos = false
+            }
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+    // MARK: - Drag handle
+
+    private var dragHandle: some View {
+        HStack {
+            Spacer()
+            RoundedRectangle(cornerRadius: 2.5)
+                .fill(Atlas.ink3)
+                .frame(width: 36, height: 4)
+            Spacer()
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    // MARK: - Kicker
+
+    private var kicker: some View {
+        HStack(spacing: 7) {
+            if let circle = appState.activeCircle {
                 Circle()
-                    .fill(accent)
-                    .frame(width: 8, height: 8)
-                Text("LOGGED FOR \(circleName.uppercased())")
+                    .fill(circle.accentSwiftUIColor)
+                    .frame(width: 7, height: 7)
+                Text("Logged for \(circle.name)")
                     .font(Atlas.Font.sans(11, weight: .medium))
                     .foregroundColor(Atlas.ink3)
-                    .kerning(1.6)
+                    .kerning(0.5)
             }
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text("You went to")
-                    .foregroundColor(Atlas.ink)
-                Text(restaurant.name)
-                    .foregroundColor(Atlas.burnt)
-                    .italic()
-            }
-            .font(Atlas.Font.serif(32))
-            .lineSpacing(2)
-
-            Text("While it's fresh, drop a photo or two and a quick note. Adds straight to \(circleName)'s journal.")
-                .font(Atlas.Font.sans(13.5))
-                .foregroundColor(Atlas.ink2)
-                .lineSpacing(4)
-                .padding(.top, 2)
         }
+        .padding(.top, 24)
     }
 
-    private var mediaTray: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
-            ForEach(0..<3, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Atlas.paper2)
-                    .overlay {
-                        Image(systemName: "photo")
-                            .font(.system(size: 18, weight: .light))
-                            .foregroundColor(Atlas.ink3)
-                    }
-                    .frame(height: 78)
-            }
+    // MARK: - Heading
 
-            Button {} label: {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Atlas.rule, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    .frame(height: 78)
-                    .overlay {
-                        VStack(spacing: 4) {
-                            Image(systemName: "camera")
-                                .font(.system(size: 18, weight: .light))
-                            Text("add")
-                                .font(Atlas.Font.sans(9))
-                                .textCase(.lowercase)
-                        }
-                        .foregroundColor(Atlas.ink3)
-                    }
-            }
-            .buttonStyle(.plain)
-            .disabled(true)
-        }
+    private var heading: some View {
+        (
+            Text("You went to ")
+                .font(Atlas.Font.serif(28))
+                .foregroundColor(Atlas.ink)
+            + Text(restaurant.name)
+                .font(Atlas.Font.serif(28, italic: true))
+                .foregroundColor(Atlas.burnt)
+            + Text(".")
+                .font(Atlas.Font.serif(28))
+                .foregroundColor(Atlas.ink)
+        )
+        .lineLimit(4)
+        .minimumScaleFactor(0.8)
+        .padding(.top, 10)
     }
 
-    private var visitDetails: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("VISIT DATE")
-                    .font(Atlas.Font.sans(10.5, weight: .medium))
-                    .foregroundColor(Atlas.ink3)
-                    .kerning(1.6)
+    // MARK: - Subtitle
 
-                DatePicker("Visit date", selection: $visitedAt, displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-                    .tint(Atlas.burnt)
-            }
+    private var subtitle: some View {
+        Text("While it's fresh — how was it?")
+            .font(Atlas.Font.sans(14))
+            .foregroundColor(Atlas.ink2)
+            .padding(.top, 8)
+    }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("RATING")
-                    .font(Atlas.Font.sans(10.5, weight: .medium))
-                    .foregroundColor(Atlas.ink3)
-                    .kerning(1.6)
+    // MARK: - Rating
 
-                HStack(spacing: 6) {
-                    ForEach(1...5, id: \.self) { value in
-                        Button {
-                            rating = Double(value)
-                        } label: {
-                            Image(systemName: (rating ?? 0) >= Double(value) ? "star.fill" : "star")
-                                .font(.system(size: 24, weight: .regular))
-                                .foregroundColor((rating ?? 0) >= Double(value) ? Atlas.burnt : Atlas.ink3)
-                                .frame(width: 34, height: 34)
-                        }
-                        .buttonStyle(.plain)
+    private var ratingSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("RATING")
+                .font(Atlas.Font.sans(10.5, weight: .medium))
+                .foregroundColor(Atlas.ink3)
+                .kerning(1.6)
+
+            HStack(spacing: 12) {
+                ForEach(1...5, id: \.self) { star in
+                    Button {
+                        selectedRating = selectedRating == star ? 0 : star
+                    } label: {
+                        Image(systemName: star <= selectedRating ? "star.fill" : "star")
+                            .font(.system(size: 26, weight: .ultraLight))
+                            .foregroundColor(star <= selectedRating ? Atlas.burnt : Atlas.ink3)
                     }
+                    .buttonStyle(.plain)
+                }
 
-                    Spacer()
-
-                    if rating != nil {
-                        Button("Clear") { rating = nil }
-                            .font(Atlas.Font.sans(12, weight: .medium))
-                            .foregroundColor(Atlas.ink3)
-                    }
+                if selectedRating > 0 {
+                    Text(ratingLabel)
+                        .font(Atlas.Font.sans(12))
+                        .foregroundColor(Atlas.ink2)
+                        .padding(.leading, 2)
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
             }
+            .animation(.easeInOut(duration: 0.15), value: selectedRating)
+        }
+        .padding(.top, 30)
+    }
+
+    private var ratingLabel: String {
+        switch selectedRating {
+        case 1: return "Not for us"
+        case 2: return "It was okay"
+        case 3: return "Pretty good"
+        case 4: return "Really good"
+        case 5: return "Obsessed"
+        default: return ""
         }
     }
 
-    private var noteField: some View {
-        ZStack(alignment: .topLeading) {
-            if note.isEmpty {
-                Text("Add a quick note...")
+    // MARK: - Photo tray
+
+    private var photoTraySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PHOTOS")
+                .font(Atlas.Font.sans(10.5, weight: .medium))
+                .foregroundColor(Atlas.ink3)
+                .kerning(1.6)
+
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(Array(selectedImages.enumerated()), id: \.offset) { idx, image in
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: tileSide, height: tileSide)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                        Button {
+                            selectedImages.remove(at: idx)
+                            if idx < pickerItems.count { pickerItems.remove(at: idx) }
+                        } label: {
+                            ZStack {
+                                Circle().fill(Atlas.ink).frame(width: 20, height: 20)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(Atlas.paper)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 6, y: -6)
+                    }
+                }
+
+                if selectedImages.count < 3 {
+                    PhotosPicker(
+                        selection: $pickerItems,
+                        maxSelectionCount: 3,
+                        matching: .images
+                    ) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Atlas.paper2)
+                                .frame(width: tileSide, height: tileSide)
+                            if isLoadingPhotos {
+                                ProgressView().tint(Atlas.ink3)
+                            } else {
+                                VStack(spacing: 4) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 18, weight: .light))
+                                        .foregroundColor(Atlas.ink3)
+                                    Text("Add")
+                                        .font(Atlas.Font.sans(10))
+                                        .foregroundColor(Atlas.ink3)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer()
+            }
+        }
+        .padding(.top, 24)
+    }
+
+    // MARK: - Note
+
+    private var noteSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("NOTE")
+                .font(Atlas.Font.sans(10.5, weight: .medium))
+                .foregroundColor(Atlas.ink3)
+                .kerning(1.6)
+
+            ZStack(alignment: .topLeading) {
+                if visitNote.isEmpty {
+                    Text("What made it special?")
+                        .font(Atlas.Font.serif(15, italic: true))
+                        .foregroundColor(Atlas.ink3)
+                        .padding(.top, 14)
+                        .padding(.leading, 16)
+                }
+                TextEditor(text: $visitNote)
                     .font(Atlas.Font.serif(15, italic: true))
-                    .foregroundColor(Atlas.ink3)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 15)
+                    .foregroundColor(Atlas.ink)
+                    .frame(minHeight: 100)
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
             }
-
-            TextEditor(text: $note)
-                .font(Atlas.Font.serif(15, italic: true))
-                .foregroundColor(Atlas.ink)
-                .frame(minHeight: 96)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .scrollContentBackground(.hidden)
-                .background(.clear)
+            .background(Atlas.paper2)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .background(Atlas.paper2)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.top, 24)
     }
 
-    private var actionRow: some View {
-        HStack(spacing: 10) {
-            Button {
-                Task { await save(skipDetails: true) }
-            } label: {
-                Text("Skip for now")
-                    .font(Atlas.Font.sans(13.5, weight: .medium))
-                    .foregroundColor(Atlas.ink2)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Atlas.paper)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .disabled(isSaving)
+    // MARK: - CTA buttons
 
+    private var ctaButtons: some View {
+        VStack(spacing: 10) {
+            if let err = errorMessage {
+                Text(err)
+                    .font(Atlas.Font.sans(13))
+                    .foregroundColor(Atlas.burnt)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 2)
+            }
             Button {
-                Task { await save(skipDetails: false) }
+                Task { await saveVisit() }
             } label: {
                 Group {
                     if isSaving {
@@ -224,42 +292,73 @@ struct MarkVisitedSheet: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 50)
+                .frame(height: 52)
                 .background(Atlas.ink)
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            .disabled(isSaving)
+            .disabled(isSaving || isSkipping)
+
+            Button {
+                Task { await skipVisit() }
+            } label: {
+                Group {
+                    if isSkipping {
+                        ProgressView().tint(Atlas.ink)
+                    } else {
+                        Text("Skip for now")
+                            .font(Atlas.Font.sans(14, weight: .medium))
+                            .foregroundColor(Atlas.ink2)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .disabled(isSaving || isSkipping)
         }
     }
 
-    private func save(skipDetails: Bool) async {
+    // MARK: - Actions
+
+    private func saveVisit() async {
         isSaving = true
         errorMessage = nil
-
+        let ratingValue: Double? = selectedRating > 0 ? Double(selectedRating) : nil
+        let noteValue = visitNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let photoData = selectedImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
         do {
-            try await appState.saveVisit(
-                for: restaurant,
-                visitedAt: visitedAt,
-                notes: skipDetails ? nil : note.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                rating: skipDetails ? nil : rating
+            try await appState.markVisitedWithRecord(
+                restaurantId: restaurant.id,
+                rating: ratingValue,
+                visitNote: noteValue.isEmpty ? nil : noteValue,
+                photos: photoData
             )
             isPresented = false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = "Couldn't save — try again or skip."
         }
-
         isSaving = false
     }
-}
 
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
+    private func skipVisit() async {
+        isSkipping = true
+        do {
+            try await appState.markVisited(restaurantId: restaurant.id)
+            isPresented = false
+        } catch {
+            // Sheet remains open
+        }
+        isSkipping = false
     }
 }
 
 #Preview {
-    MarkVisitedSheet(isPresented: .constant(true), restaurant: Restaurant.mockList[0])
-        .environment(AppState.preview)
+    let state = AppState.preview
+    return MarkVisitedSheet(
+        isPresented: .constant(true),
+        restaurant: Restaurant.mockList[0]
+    )
+    .environment(state)
 }

@@ -124,37 +124,43 @@ final class AppState {
         }
     }
 
-    func saveVisit(
-        for restaurant: Restaurant,
-        visitedAt: Date,
-        notes: String?,
-        rating: Double?
+    func markVisitedWithRecord(
+        restaurantId: UUID,
+        rating: Double?,
+        visitNote: String?,
+        photos: [Data] = []
     ) async throws {
-        guard let userId = currentUser?.id else {
-            throw NSError(
-                domain: "Scout",
-                code: 401,
-                userInfo: [NSLocalizedDescriptionKey: "Sign in again before saving a visit."]
-            )
+        guard let userId = currentUser?.id,
+              let circleId = activeCircle?.id else { return }
+
+        try await supabase.markVisited(restaurantId)
+
+        if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
+            restaurants[idx].status = .visited
+            if let rating { restaurants[idx].rating = rating }
         }
 
+        if let rating {
+            try? await supabase.updateRestaurantRating(restaurantId, rating: rating)
+        }
         let visit = Visit(
-            restaurantId: restaurant.id,
-            circleId: restaurant.circleId,
+            restaurantId: restaurantId,
+            circleId: circleId,
             userId: userId,
-            visitedAt: visitedAt,
-            notes: notes,
+            visitedAt: Date(),
+            notes: visitNote,
             rating: rating
         )
-
-        _ = try await supabase.addVisit(visit)
-        try await supabase.markVisited(restaurant.id, rating: rating)
-
-        if let idx = restaurants.firstIndex(where: { $0.id == restaurant.id }) {
-            restaurants[idx].status = .visited
-            if let rating {
-                restaurants[idx].rating = rating
-            }
+        let savedVisit = try? await supabase.addVisit(visit)
+        if !photos.isEmpty {
+            let visitId = savedVisit?.id ?? visit.id
+            try? await supabase.uploadVisitPhotos(
+                photos,
+                visitId: visitId,
+                restaurantId: restaurantId,
+                circleId: circleId,
+                userId: userId
+            )
         }
     }
 

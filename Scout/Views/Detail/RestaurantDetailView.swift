@@ -53,7 +53,7 @@ struct RestaurantDetailView: View {
         .sheet(isPresented: $showMarkVisited) {
             if let r = restaurant {
                 MarkVisitedSheet(isPresented: $showMarkVisited, restaurant: r)
-                    .presentationDetents([.height(560), .large])
+                    .presentationDetents([.medium, .large])
                     .presentationCornerRadius(Atlas.sheetTopRadius)
             }
         }
@@ -238,14 +238,16 @@ struct RestaurantDetailView: View {
     private func ctaButtons(_ r: Restaurant) -> some View {
         HStack(spacing: 10) {
             if r.status == .wantToTry {
-                Button { showMarkVisited = true } label: {
+                Button {
+                    showMarkVisited = true
+                } label: {
                     Text("Mark as visited")
                         .font(Atlas.Font.sans(14.5, weight: .semibold))
                         .foregroundColor(Atlas.paper)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Atlas.ink)
-                    .clipShape(Capsule())
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Atlas.ink)
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             } else {
