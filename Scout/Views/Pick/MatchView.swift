@@ -41,7 +41,7 @@ struct MatchView: View {
     private var closeRow: some View {
         HStack {
             Spacer()
-            CloseButton { onDismiss() }
+            CloseButton { onConfirm() }
                 .padding(.trailing, 20)
         }
         .padding(.top, 60)
