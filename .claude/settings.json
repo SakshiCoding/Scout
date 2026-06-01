@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "MODIFIED=$(git diff --name-only 2>/dev/null; git diff --name-only --cached 2>/dev/null); SWIFT_COUNT=$(echo \"$MODIFIED\" | grep -c '\\.swift$'); MD_COUNT=$(echo \"$MODIFIED\" | grep -cE 'CLAUDE\\.md|AGENTS\\.md'); if [ \"$SWIFT_COUNT\" -gt 0 ] && [ \"$MD_COUNT\" -eq 0 ]; then printf '{\"systemMessage\": \"⚠️  Swift files changed but CLAUDE.md and AGENTS.md were not updated. Update both before committing.\"}'; else printf '{}'; fi",
+            "statusMessage": "Checking docs are up to date..."
+          }
+        ]
+      }
+    ]
+  }
+}
