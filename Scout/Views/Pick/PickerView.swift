@@ -164,7 +164,7 @@ struct PickerView: View {
         }
         .onAppear { startSession() }
         .onChange(of: appState.activeCircle?.id) { _, _ in
-            appState.activePickMatch = nil
+            appState.clearPickMatch()
             startSession()
         }
         .sheet(isPresented: $showCirclePicker) {
@@ -181,11 +181,11 @@ struct PickerView: View {
                     onConfirm: {
                         let r = restaurant
                         matchedRestaurant = nil
-                        appState.activePickMatch = r          // stay on match; don't start a new session
+                        appState.savePickMatch(r)
                     },
                     onPickAgain: {
                         matchedRestaurant = nil
-                        appState.activePickMatch = nil
+                        appState.clearPickMatch()
                         startSession()
                     }
                 )
@@ -215,7 +215,7 @@ struct PickerView: View {
 
     private var rematchButton: some View {
         Button {
-            appState.activePickMatch = nil
+            appState.clearPickMatch()
             startSession()
         } label: {
             ZStack {

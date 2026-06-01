@@ -21,8 +21,48 @@ final class AppState {
     var activeTab: WishlistTab = .wantToTry
     var filterState = FilterState()
 
-    // MARK: - Pick UI state (survives tab switches)
+    // MARK: - Pick UI state (persisted across launches)
     var activePickMatch: Restaurant?
+
+    private static let matchRestaurantKey = "scout.pick.matchRestaurantId"
+    private static let matchCircleKey     = "scout.pick.matchCircleId"
+    private static let matchDateKey       = "scout.pick.matchDate"
+
+    func savePickMatch(_ restaurant: Restaurant) {
+        guard let circleId = activeCircle?.id else { return }
+        activePickMatch = restaurant
+        let ud = UserDefaults.standard
+        ud.set(restaurant.id.uuidString, forKey: Self.matchRestaurantKey)
+        ud.set(circleId.uuidString,      forKey: Self.matchCircleKey)
+        ud.set(todayString,              forKey: Self.matchDateKey)
+    }
+
+    func clearPickMatch() {
+        activePickMatch = nil
+        let ud = UserDefaults.standard
+        ud.removeObject(forKey: Self.matchRestaurantKey)
+        ud.removeObject(forKey: Self.matchCircleKey)
+        ud.removeObject(forKey: Self.matchDateKey)
+    }
+
+    func restorePickMatch() {
+        let ud = UserDefaults.standard
+        guard let rid = ud.string(forKey: Self.matchRestaurantKey),
+              let restaurantId = UUID(uuidString: rid),
+              let cid = ud.string(forKey: Self.matchCircleKey),
+              let circleId = UUID(uuidString: cid),
+              ud.string(forKey: Self.matchDateKey) == todayString,
+              activeCircle?.id == circleId else {
+            clearPickMatch()
+            return
+        }
+        activePickMatch = restaurants.first { $0.id == restaurantId }
+    }
+
+    private var todayString: String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        return "\(c.year!)-\(c.month!)-\(c.day!)"
+    }
 
     // MARK: - Services
     let supabase  = SupabaseService.shared
@@ -71,6 +111,7 @@ final class AppState {
             restaurants = []
         }
         isLoadingRestaurants = false
+        restorePickMatch()
     }
 
     func createCircle(name: String, accentColor: String = "#CC5500") async throws {
