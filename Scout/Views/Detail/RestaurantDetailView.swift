@@ -10,7 +10,10 @@ struct RestaurantDetailView: View {
     @State private var showMarkVisited = false
     @State private var showJournal = false
     @State private var showDeleteConfirm = false
+    @State private var showReservationOptions = false
     @State private var isDeleting = false
+
+    @Environment(\.openURL) private var openURL
 
     private var restaurant: Restaurant? {
         appState.restaurants.first { $0.id == restaurantId }
@@ -76,6 +79,22 @@ struct RestaurantDetailView: View {
             }
         } message: {
             Text("It will be removed from the circle's wishlist.")
+        }
+        .confirmationDialog(
+            "Make a reservation",
+            isPresented: $showReservationOptions,
+            titleVisibility: .visible
+        ) {
+            Button("OpenTable") {
+                if let r = restaurant { openReservation(.openTable, for: r) }
+            }
+            Button("Resy") {
+                if let r = restaurant { openReservation(.resy, for: r) }
+            }
+        } message: {
+            if let r = restaurant {
+                Text("Search for \(r.name) on your preferred reservation platform.")
+            }
         }
     }
 
@@ -257,6 +276,17 @@ struct RestaurantDetailView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+
+                Button { showReservationOptions = true } label: {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Atlas.ink)
+                        .frame(width: 52, height: 52)
+                        .background(Atlas.paper)
+                        .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             } else {
                 HStack(spacing: 6) {
                     Circle()
@@ -272,6 +302,17 @@ struct RestaurantDetailView: View {
 
                 Button { showJournal = true } label: {
                     Image(systemName: "book.closed")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Atlas.ink)
+                        .frame(width: 52, height: 52)
+                        .background(Atlas.paper)
+                        .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button { showReservationOptions = true } label: {
+                    Image(systemName: "calendar")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(Atlas.ink)
                         .frame(width: 52, height: 52)
@@ -322,6 +363,30 @@ struct RestaurantDetailView: View {
             dismiss()
         } catch {
             isDeleting = false
+        }
+    }
+
+    private enum ReservationPlatform {
+        case openTable, resy
+    }
+
+    private func openReservation(_ platform: ReservationPlatform, for restaurant: Restaurant) {
+        var components = URLComponents()
+        components.scheme = "https"
+        switch platform {
+        case .openTable:
+            components.host = "www.opentable.com"
+            components.path = "/s/"
+            components.queryItems = [
+                URLQueryItem(name: "term", value: restaurant.name),
+                URLQueryItem(name: "covers", value: "2")
+            ]
+        case .resy:
+            components.host = "resy.com"
+            components.path = "/"
+        }
+        if let url = components.url {
+            openURL(url)
         }
     }
 }
