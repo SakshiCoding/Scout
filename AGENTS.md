@@ -6,21 +6,22 @@ Scout is a shared restaurant wishlist iOS app organized around **circles** — n
 
 ## Current State
 
-The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, and Atlas design-system helpers are implemented and working end to end.
+The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, and journal browsing are implemented.
 
 | File | Status |
 |------|--------|
 | `Scout/ScoutApp.swift` | App entry point; creates and injects `AppState` |
-| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, and services |
-| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/profile methods; circles/restaurants use RPC functions |
+| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, and services |
+| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile methods; includes journal reads and private storage downloads |
 | `Scout/Services/AuthService.swift` | Auth session handling and sign-in flows |
 | `Scout/Services/LocationService.swift` | Location permissions and distance sorting |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Views/Root/RootView.swift` | Auth gate and custom tab shell |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows |
-| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button |
-| `Scout/Views/Detail/MarkVisitedSheet.swift` | Bottom sheet for logging a visit: circle kicker, restaurant heading, 1–5 star rating, italic note field, Save/Skip CTAs |
+| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut |
+| `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
+| `Scout/Views/Journal/` | Journal index, per-restaurant scrapbook, full composer, fullscreen viewer, and cross-post sheet with real visit/media loading, cached photo/video thumbnails, editable metadata, attachments, swipe paging, video playback, sharing, and deletion |
 | `Scout/Views/Circles/` | Circle switcher pill, picker sheet, and new circle sheet |
 | `Scout/Views/Shared/` | Shared small UI components and Atlas icons |
 | `Scout/Models/` | Circle, restaurant, visit, and media models |
@@ -182,7 +183,13 @@ The schema lives in `supabase/migrations/`. Current circle and restaurant creati
 - `get_my_circles`
 - `add_restaurant`
 - `get_circle_restaurants`
+- `add_visit`
+- `mark_visited`
 - helper: `is_circle_member`
+
+Journal photos and videos use the private `scout-media` Supabase Storage bucket. Migration `20260601000000_add_scout_media_storage_policies.sql` creates the bucket and circle-member read/upload/delete policies. Migration `20260601001000_add_visit_journal_fields.sql` adds visit `occasion` and `vibe_tags` fields and extends the `add_visit` RPC payload. Migration `20260601002000_repair_journal_media_policies.sql` idempotently repairs storage and `public.media` policies for databases whose initial schema was applied manually. Migration `20260601003000_repair_journal_visit_policies.sql` repairs `public.visits` read/write policies so persisted entries remain visible after reload. Apply pending migrations before testing journal entry creation or media upload/download.
+
+Confirmed journal visits and uploaded media are merged into `AppState` immediately and preserved while the network refresh reconciles with Supabase. Keep this optimistic merge behavior when changing journal loading so a delayed response cannot make a newly saved entry disappear.
 
 ---
 
@@ -193,16 +200,16 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance |
-| 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited |
+| 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut |
 | 3 | `PickerView` | Pick | Placeholder tab only | Swipe-based matching — both members pick independently, match revealed when both agree |
 | 4 | `MapView` | Map | Implemented | Full-bleed MapKit map with custom Atlas pins, glass header, bottom peek card |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
-| 6 | `JournalIndexView` | Journal | Placeholder tab only | Table of contents for the circle's visit history |
-| 7 | `JournalLocationView` | — | Not yet implemented | Per-restaurant scrapbook with polaroid clusters |
-| 8 | `JournalComposeView` | — | Not yet implemented | New journal entry: photos, date, occasion, note, vibe tags |
-| 9 | `JournalViewerView` | — | Not yet implemented | Fullscreen photo/video viewer with caption block |
-| 10 | `MarkVisitedSheet` | — | Implemented | Auto-prompted after "Mark as visited" — 1–5 star rating + visit note; "Save to journal" creates a Visit record, "Skip for now" marks visited only |
-| 11 | `CrossPostSheet` | — | Not yet implemented | Share a journal photo/video to another circle or externally |
+| 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
+| 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, and destructive entry deletion |
+| 8 | `JournalComposeView` | — | Implemented | Full-screen new entry flow: editable date, occasion, note, vibe chips, removable photo/video attachments, and save |
+| 9 | `JournalViewerView` | — | Implemented | Fullscreen dark photo/video viewer with swipe paging, page dots, caption block, cached thumbnail strip, close/share/overflow controls, deletion, and native video playback |
+| 10 | `MarkVisitedSheet` | — | Implemented | Auto-prompted after "Mark as visited" — rating, photos, and visit note; "Save to journal" creates a Visit record and uploads photos, "Skip for now" marks visited only |
+| 11 | `CrossPostSheet` | — | Implemented | Copy a journal photo/video into another circle's matching restaurant journal or share externally through iOS |
 
 ### Key layout rules across all screens
 
@@ -246,14 +253,15 @@ Phase 1 verified behavior:
 - [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited, delete; no photos/hours/Places enrichment yet)
 - [x] MapView (MapKit pins — per-type colors, glass header, peek card, user location, filter wiring)
 - [x] Visited tracking + notes + rating (`markVisitedWithRecord` in AppState; writes Visit row + updates restaurant rating)
-- [x] MarkVisitedSheet (star rating, visit note, Save/Skip; auto-shown after "Mark as visited")
-- [ ] JournalIndexView
-- [ ] JournalLocationView
-- [ ] JournalComposeView
-- [ ] JournalViewerView
-- [ ] CrossPostSheet
+- [x] MarkVisitedSheet (star rating, photos, visit note, Save/Skip; auto-shown after "Mark as visited")
+- [x] Journal read path (`fetchVisits`, `fetchMedia`, private storage download, grouped summaries in `AppState`)
+- [x] JournalIndexView (real data, stats, navigation, empty state)
+- [x] JournalLocationView (scrapbook entries, occasion labels, photo thumbnails, empty state, and entry deletion with storage cleanup)
+- [x] JournalComposeView (editable date, occasion, note, vibe tags, photo/video attachment management)
+- [x] JournalViewerView (fullscreen photo/video viewer with swipe paging, captions, thumbnails, and native video playback)
+- [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)
 - [ ] PickerView + MatchView
-- [ ] MediaService (photo/video capture)
+- [x] MediaService (cached photo/video thumbnails, external-share file preparation, and direct camera photo capture)
 - [ ] Reservation deep links (OpenTable/Resy)
 
 ### Phase 3 — Polish & Platform

@@ -104,11 +104,13 @@ final class SupabaseService {
             let visitedAt: Date
             let notes: String?
             let rating: Double?
+            let occasion: String?
+            let vibeTags: [String]
 
             enum CodingKeys: String, CodingKey {
                 case visitedAt = "visited_at"
-                case notes
-                case rating
+                case notes, rating, occasion
+                case vibeTags = "vibe_tags"
             }
 
             func encode(to encoder: Encoder) throws {
@@ -116,6 +118,8 @@ final class SupabaseService {
                 try container.encode(visitedAt, forKey: .visitedAt)
                 try container.encodeNullable(notes, forKey: .notes)
                 try container.encodeNullable(rating, forKey: .rating)
+                try container.encodeNullable(occasion, forKey: .occasion)
+                try container.encode(vibeTags, forKey: .vibeTags)
             }
         }
 
@@ -309,7 +313,9 @@ final class SupabaseService {
                     visitPayload: AddVisitParams.VisitPayload(
                         visitedAt: visit.visitedAt,
                         notes: visit.notes,
-                        rating: visit.rating
+                        rating: visit.rating,
+                        occasion: visit.occasion,
+                        vibeTags: visit.vibeTags
                     )
                 )
             )
@@ -317,7 +323,64 @@ final class SupabaseService {
             .value
     }
 
+    func fetchVisits(circleId: UUID) async throws -> [Visit] {
+        try await client
+            .from("visits")
+            .select()
+            .eq("circle_id", value: circleId)
+            .order("visited_at", ascending: false)
+            .execute()
+            .value
+    }
+
     // MARK: - Media
+
+    func fetchMedia(circleId: UUID) async throws -> [Media] {
+        try await client
+            .from("media")
+            .select()
+            .eq("circle_id", value: circleId)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+    }
+
+    func downloadMedia(path: String) async throws -> Data {
+        try await client.storage
+            .from("scout-media")
+            .download(path: path)
+    }
+
+    func signedMediaURL(path: String) async throws -> URL {
+        try await client.storage
+            .from("scout-media")
+            .createSignedURL(path: path, expiresIn: 60 * 60)
+    }
+
+    func deleteMedia(_ media: Media) async throws {
+        let bucket = client.storage.from("scout-media")
+        try await bucket.remove(paths: [media.storagePath])
+        try await client
+            .from("media")
+            .delete()
+            .eq("id", value: media.id)
+            .execute()
+    }
+
+    func deleteVisit(_ visit: Visit, media: [Media]) async throws {
+        let paths = media.map(\.storagePath)
+        if !paths.isEmpty {
+            try await client.storage
+                .from("scout-media")
+                .remove(paths: paths)
+        }
+
+        try await client
+            .from("visits")
+            .delete()
+            .eq("id", value: visit.id)
+            .execute()
+    }
 
     func uploadVisitPhotos(
         _ photos: [Data],
@@ -325,20 +388,38 @@ final class SupabaseService {
         restaurantId: UUID,
         circleId: UUID,
         userId: UUID
-    ) async throws {
-        let bucket = client.storage.from("scout-media")
+    ) async throws -> [Media] {
+        try await uploadVisitMedia(
+            photos.map(VisitMediaUpload.photo),
+            visitId: visitId,
+            restaurantId: restaurantId,
+            circleId: circleId,
+            userId: userId
+        )
+    }
 
-        for photoData in photos {
-            let photoId = UUID().uuidString
-            let path = "circles/\(circleId)/visits/\(visitId)/\(photoId).jpg"
+    func uploadVisitMedia(
+        _ uploads: [VisitMediaUpload],
+        visitId: UUID,
+        restaurantId: UUID,
+        circleId: UUID,
+        userId: UUID
+    ) async throws -> [Media] {
+        let bucket = client.storage.from("scout-media")
+        var savedMedia: [Media] = []
+
+        for upload in uploads {
+            let mediaId = UUID()
+            let path = "circles/\(circleId)/visits/\(visitId)/\(mediaId.uuidString).\(upload.fileExtension)"
 
             _ = try await bucket.upload(
                 path,
-                data: photoData,
-                options: FileOptions(contentType: "image/jpeg")
+                data: upload.data,
+                options: FileOptions(contentType: upload.contentType)
             )
 
             struct MediaInsert: Encodable {
+                let id: UUID
                 let restaurantId: UUID
                 let visitId: UUID
                 let circleId: UUID
@@ -346,6 +427,7 @@ final class SupabaseService {
                 let storagePath: String
                 let mediaType: String
                 enum CodingKeys: String, CodingKey {
+                    case id
                     case restaurantId = "restaurant_id"
                     case visitId      = "visit_id"
                     case circleId     = "circle_id"
@@ -355,18 +437,37 @@ final class SupabaseService {
                 }
             }
 
-            try await client
-                .from("media")
-                .insert(MediaInsert(
-                    restaurantId: restaurantId,
-                    visitId: visitId,
-                    circleId: circleId,
-                    userId: userId,
-                    storagePath: path,
-                    mediaType: "photo"
-                ))
-                .execute()
+            do {
+                try await client
+                    .from("media")
+                    .insert(MediaInsert(
+                        id: mediaId,
+                        restaurantId: restaurantId,
+                        visitId: visitId,
+                        circleId: circleId,
+                        userId: userId,
+                        storagePath: path,
+                        mediaType: upload.mediaType.rawValue
+                    ))
+                    .execute()
+            } catch {
+                try? await bucket.remove(paths: [path])
+                throw error
+            }
+
+            savedMedia.append(Media(
+                id: mediaId,
+                restaurantId: restaurantId,
+                visitId: visitId,
+                circleId: circleId,
+                userId: userId,
+                storagePath: path,
+                mediaType: upload.mediaType,
+                createdAt: Date()
+            ))
         }
+
+        return savedMedia
     }
 
     // MARK: - Profiles
