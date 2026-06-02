@@ -8,6 +8,7 @@ struct RestaurantDetailView: View {
 
     @State private var showEdit = false
     @State private var showMarkVisited = false
+    @State private var showJournal = false
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
 
@@ -55,6 +56,12 @@ struct RestaurantDetailView: View {
                 MarkVisitedSheet(isPresented: $showMarkVisited, restaurant: r)
                     .presentationDetents([.medium, .large])
                     .presentationCornerRadius(Atlas.sheetTopRadius)
+            }
+        }
+        .fullScreenCover(isPresented: $showJournal) {
+            NavigationStack {
+                JournalLocationView(restaurantId: restaurantId)
+                    .environment(appState)
             }
         }
         .confirmationDialog(
@@ -262,6 +269,17 @@ struct RestaurantDetailView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+
+                Button { showJournal = true } label: {
+                    Image(systemName: "book.closed")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Atlas.ink)
+                        .frame(width: 52, height: 52)
+                        .background(Atlas.paper)
+                        .overlay(Capsule().stroke(Atlas.rule, lineWidth: 1))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
 
             Button { showEdit = true } label: {

@@ -24,4 +24,48 @@ struct Media: Identifiable, Codable {
         case mediaType    = "media_type"
         case createdAt    = "created_at"
     }
+
+    var fileExtension: String {
+        let pathExtension = (storagePath as NSString).pathExtension
+        guard !pathExtension.isEmpty else {
+            return mediaType == .video ? "mov" : "jpg"
+        }
+        return pathExtension
+    }
+
+    var contentType: String {
+        switch fileExtension.lowercased() {
+        case "png": return "image/png"
+        case "heic", "heif": return "image/heic"
+        case "mp4": return "video/mp4"
+        case "m4v": return "video/x-m4v"
+        case "mov": return "video/quicktime"
+        default: return mediaType == .video ? "video/quicktime" : "image/jpeg"
+        }
+    }
+}
+
+struct VisitMediaUpload {
+    let data: Data
+    let mediaType: Media.MediaType
+    let fileExtension: String
+    let contentType: String
+
+    static func photo(_ data: Data) -> VisitMediaUpload {
+        VisitMediaUpload(
+            data: data,
+            mediaType: .photo,
+            fileExtension: "jpg",
+            contentType: "image/jpeg"
+        )
+    }
+
+    static func video(_ data: Data, fileExtension: String = "mov", contentType: String = "video/quicktime") -> VisitMediaUpload {
+        VisitMediaUpload(
+            data: data,
+            mediaType: .video,
+            fileExtension: fileExtension,
+            contentType: contentType
+        )
+    }
 }

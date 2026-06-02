@@ -37,7 +37,7 @@ struct RootView: View {
         case .list:    WishlistView()
         case .map:     MapView()
         case .pick:    PickerView()
-        case .journal: PlaceholderTabView(tab: "Journal", icon: "book.closed", phase: "Phase 2")
+        case .journal: JournalIndexView { selectedTab = .list }
         }
     }
 

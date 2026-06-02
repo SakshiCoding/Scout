@@ -117,16 +117,21 @@ Backend note: Supabase migrations live in `supabase/migrations/`. Circle and res
 - [ ] PlacesService (Apple Places API integration)
 - [ ] Rich info card (hours, open now, dishes, rating, photo)
 - [ ] MapView (MapKit pins)
-- [ ] Visited tracking + notes + rating
-- [ ] MarkVisitedSheet (auto-prompt after marking visited)
-- [ ] JournalIndexView (table of contents per circle)
-- [ ] JournalLocationView (scrapbook per restaurant)
-- [ ] JournalComposeView (new entry: photos, video, note, vibe tags)
-- [ ] JournalViewerView (fullscreen photo/video with caption)
-- [ ] CrossPostSheet (share media to another circle)
+- [x] Visited tracking + notes + rating
+- [x] MarkVisitedSheet (auto-prompt after marking visited)
+- [x] JournalIndexView (table of contents per circle)
+- [x] JournalLocationView (scrapbook per restaurant)
+- [x] JournalComposeView (new entry: photos, video, editable date, occasion, note, vibe tags)
+- [x] JournalViewerView (fullscreen photo/video with caption, swipe paging, thumbnails, and native playback)
+- [x] Journal media policy repair migration for manually initialized Supabase projects
+- [x] Journal visit policy repair migration for persisted entry visibility
+- [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)
+- [x] Viewer media deletion and cached photo/video thumbnails
+- [x] Journal entry deletion with attached storage cleanup
 - [ ] PickerView (swipe UI with partner progress)
 - [ ] MatchView (reveal screen)
-- [ ] MediaService (photo/video capture)
+- [x] MediaService foundation (cached photo/video thumbnails and external-share file preparation)
+- [x] Direct camera photo capture
 - [ ] Reservation deep links (OpenTable/Resy)
 
 ### Phase 3 — Polish & Platform
