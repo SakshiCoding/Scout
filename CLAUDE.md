@@ -204,7 +204,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance |
-| 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut |
+| 2 | `RestaurantDetailView` | — | Implemented (Phase 2) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, reservation deep links (OpenTable/Resy) |
 | 3 | `PickerView` + `MatchView` | Pick | Implemented (Phase 2) | Swipe-based pick: `PickSession` draws a deterministic deck of 3 restaurants (seeded by circleId + calendar date + time-of-day so all circle members see the same set); time-of-day filtering via `establishmentType` (morning/lunch/dinner windows); SF-Symbol heart badge on yes button; simulated partner progress; on mutual match `MatchView` animates in; post-match: Pick tab shows matched restaurant persistently with a shuffle rematch button top-trailing; match saved to Supabase `picks` table (one per circle per day) + UserDefaults offline cache; `MatchView` has `onConfirm`/`onPickAgain` callbacks |
 | 4 | `MapView` | Map | Implemented | Full-bleed MapKit map with custom Atlas pins, glass header, bottom peek card |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
@@ -266,7 +266,7 @@ Phase 1 verified behavior:
 - [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)
 - [x] PickerView + MatchView (local session, simulated partner; match result persisted to Supabase `picks` table + UserDefaults cache; real-time partner sync deferred to future phase)
 - [x] MediaService (cached photo/video thumbnails, external-share file preparation, and direct camera photo capture)
-- [ ] Reservation deep links (OpenTable/Resy)
+- [x] Reservation deep links (OpenTable/Resy)
 
 ### Phase 3 — Polish & Platform
 > Native iOS integrations and social import
