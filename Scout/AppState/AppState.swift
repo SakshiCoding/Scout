@@ -29,6 +29,72 @@ final class AppState {
     var activeTab: WishlistTab = .wantToTry
     var filterState = FilterState()
 
+    // MARK: - Pick UI state (persisted across launches)
+    var activePickMatch: Restaurant?
+
+    private static let matchRestaurantKey = "scout.pick.matchRestaurantId"
+    private static let matchCircleKey     = "scout.pick.matchCircleId"
+    private static let matchDateKey       = "scout.pick.matchDate"
+
+    func savePickMatch(_ restaurant: Restaurant) {
+        guard let circleId = activeCircle?.id,
+              let userId = currentUser?.id else { return }
+        activePickMatch = restaurant
+        // Cache locally so the UI updates instantly, then persist to Supabase
+        cachePickLocally(restaurantId: restaurant.id, circleId: circleId)
+        Task {
+            try? await supabase.savePick(circleId: circleId, restaurantId: restaurant.id, userId: userId)
+        }
+    }
+
+    func clearPickMatch() {
+        activePickMatch = nil
+        let ud = UserDefaults.standard
+        ud.removeObject(forKey: Self.matchRestaurantKey)
+        ud.removeObject(forKey: Self.matchCircleKey)
+        ud.removeObject(forKey: Self.matchDateKey)
+    }
+
+    func restorePickMatch() {
+        guard let circleId = activeCircle?.id else { return }
+        // Try Supabase first; fall back to local cache if offline
+        Task {
+            if let restaurantId = try? await supabase.fetchTodayPick(circleId: circleId) {
+                activePickMatch = restaurants.first { $0.id == restaurantId }
+                if let match = activePickMatch {
+                    cachePickLocally(restaurantId: match.id, circleId: circleId)
+                }
+            } else {
+                restorePickFromCache(circleId: circleId)
+            }
+        }
+    }
+
+    private func cachePickLocally(restaurantId: UUID, circleId: UUID) {
+        let ud = UserDefaults.standard
+        ud.set(restaurantId.uuidString, forKey: Self.matchRestaurantKey)
+        ud.set(circleId.uuidString,     forKey: Self.matchCircleKey)
+        ud.set(todayString,             forKey: Self.matchDateKey)
+    }
+
+    private func restorePickFromCache(circleId: UUID) {
+        let ud = UserDefaults.standard
+        guard let rid = ud.string(forKey: Self.matchRestaurantKey),
+              let restaurantId = UUID(uuidString: rid),
+              let cid = ud.string(forKey: Self.matchCircleKey),
+              UUID(uuidString: cid) == circleId,
+              ud.string(forKey: Self.matchDateKey) == todayString else {
+            clearPickMatch()
+            return
+        }
+        activePickMatch = restaurants.first { $0.id == restaurantId }
+    }
+
+    private var todayString: String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        return "\(c.year!)-\(c.month!)-\(c.day!)"
+    }
+
     // MARK: - Services
     let supabase  = SupabaseService.shared
     let auth      = AuthService()
@@ -95,6 +161,7 @@ final class AppState {
             restaurants = []
         }
         isLoadingRestaurants = false
+        restorePickMatch()
     }
 
     func loadJournal() async {

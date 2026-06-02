@@ -301,6 +301,51 @@ final class SupabaseService {
             .execute()
     }
 
+    // MARK: - Picks
+
+    func savePick(circleId: UUID, restaurantId: UUID, userId: UUID) async throws {
+        struct PickRow: Encodable {
+            let circleId: UUID
+            let restaurantId: UUID
+            let createdBy: UUID
+            enum CodingKeys: String, CodingKey {
+                case circleId = "circle_id"
+                case restaurantId = "restaurant_id"
+                case createdBy = "created_by"
+            }
+        }
+        try await client
+            .from("picks")
+            .upsert(
+                PickRow(circleId: circleId, restaurantId: restaurantId, createdBy: userId),
+                onConflict: "circle_id,picked_date"
+            )
+            .execute()
+    }
+
+    func fetchTodayPick(circleId: UUID) async throws -> UUID? {
+        struct PickRow: Decodable {
+            let restaurantId: UUID
+            enum CodingKeys: String, CodingKey {
+                case restaurantId = "restaurant_id"
+            }
+        }
+        let today = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd"
+            return f.string(from: Date())
+        }()
+        let rows: [PickRow] = try await client
+            .from("picks")
+            .select("restaurant_id")
+            .eq("circle_id", value: circleId)
+            .eq("picked_date", value: today)
+            .limit(1)
+            .execute()
+            .value
+        return rows.first?.restaurantId
+    }
+
     // MARK: - Visits
 
     func addVisit(_ visit: Visit) async throws -> Visit {
