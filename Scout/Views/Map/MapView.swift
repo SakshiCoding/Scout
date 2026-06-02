@@ -12,6 +12,8 @@ struct MapView: View {
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var hasInitiallyLocated = false
     @State private var locationAuthStatus: CLAuthorizationStatus = .notDetermined
+    @State private var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
+    @State private var mapSpan: MKCoordinateSpan = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
 
     private var mappableRestaurants: [Restaurant] {
         let base = appState.restaurants.filter { $0.coordinate != nil && appState.filterState.matches($0) }
@@ -32,6 +34,12 @@ struct MapView: View {
                 .padding(.bottom, Atlas.tabBarBottomOffset + Atlas.tabBarHeight + 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            zoomControls
+                .padding(.trailing, 16)
+                .padding(.bottom, Atlas.tabBarBottomOffset + Atlas.tabBarHeight + (selectedPin != nil ? 114 : 16))
+                .animation(.spring(duration: 0.3), value: selectedPin?.id)
         }
         .animation(.spring(duration: 0.3), value: selectedPin?.id)
         .sheet(isPresented: $showCirclePicker) {
@@ -57,6 +65,7 @@ struct MapView: View {
         }
         .onAppear {
             locationAuthStatus = appState.location.authorizationStatus
+            appState.location.startUpdating()
         }
         .onReceive(appState.location.$authorizationStatus) { status in
             locationAuthStatus = status
@@ -91,6 +100,59 @@ struct MapView: View {
         }
     }
 
+    private func zoomIn() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: mapCenter,
+                span: MKCoordinateSpan(
+                    latitudeDelta: max(mapSpan.latitudeDelta / 2, 0.001),
+                    longitudeDelta: max(mapSpan.longitudeDelta / 2, 0.001)
+                )
+            ))
+        }
+    }
+
+    private func zoomOut() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: mapCenter,
+                span: MKCoordinateSpan(
+                    latitudeDelta: min(mapSpan.latitudeDelta * 2, 60),
+                    longitudeDelta: min(mapSpan.longitudeDelta * 2, 60)
+                )
+            ))
+        }
+    }
+
+    private var zoomControls: some View {
+        VStack(spacing: 0) {
+            Button(action: zoomIn) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Atlas.ink)
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(.plain)
+            Divider()
+                .frame(width: 22)
+                .background(Atlas.rule)
+            Button(action: zoomOut) {
+                Image(systemName: "minus")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Atlas.ink)
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(.plain)
+        }
+        .background(
+            Atlas.paper.opacity(0.85)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .pillShadow(glass: true)
+    }
+
     // MARK: - Map
 
     private var mapLayer: some View {
@@ -114,6 +176,10 @@ struct MapView: View {
         }
         .mapStyle(.standard)
         .mapControls { }
+        .onMapCameraChange { context in
+            mapCenter = context.region.center
+            mapSpan   = context.region.span
+        }
         .ignoresSafeArea()
     }
 

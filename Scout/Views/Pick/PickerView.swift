@@ -20,6 +20,30 @@ enum TimeOfDay: Int {
         }
     }
 
+    var accentLabel: String {
+        switch self {
+        case .morning: return "THIS MORNING"
+        case .lunch:   return "TODAY"
+        case .dinner:  return "TONIGHT"
+        }
+    }
+
+    var matchedAccentLabel: String {
+        switch self {
+        case .morning: return "THIS MORNING'S PICK"
+        case .lunch:   return "TODAY'S PICK"
+        case .dinner:  return "TONIGHT'S PICK"
+        }
+    }
+
+    var completePrefix: String {
+        switch self {
+        case .morning: return "This morning: "
+        case .lunch:   return "Today: "
+        case .dinner:  return "Tonight: "
+        }
+    }
+
     func includes(_ type: Restaurant.EstablishmentType) -> Bool {
         switch self {
         case .morning:
@@ -236,7 +260,7 @@ struct PickerView: View {
     private func matchedView(restaurant: Restaurant, circle: ScoutCircle) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                CircleAccentRule(circle: circle, label: "TONIGHT'S PICK")
+                CircleAccentRule(circle: circle, label: (session?.timeOfDay ?? .current).matchedAccentLabel)
                 (Text("Going to ")
                     .font(Atlas.Font.serif(36))
                     .foregroundColor(Atlas.ink)
@@ -285,7 +309,7 @@ struct PickerView: View {
 
     private func headingSection(session: PickSession, circle: ScoutCircle) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            CircleAccentRule(circle: circle, label: "TONIGHT")
+            CircleAccentRule(circle: circle, label: session.timeOfDay.accentLabel)
             (Text("Pick ")
                 .font(Atlas.Font.serif(36))
                 .foregroundColor(Atlas.ink)
@@ -529,7 +553,7 @@ struct PickerView: View {
                             .foregroundColor(Atlas.ink3)
                             .kerning(2)
                     }
-                    (Text("Tonight: ")
+                    (Text(session.timeOfDay.completePrefix)
                         .font(Atlas.Font.serif(32))
                         .foregroundColor(Atlas.ink)
                     + Text(match.name)

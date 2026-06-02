@@ -299,8 +299,4 @@ All mockups are pixel-accurate React/JSX components. Read these when implementin
 
 ## Known Issues
 
-These bugs are confirmed and need to be fixed:
-
-| Area | Issue | Files |
-|------|-------|-------|
-| Location | `requestWhenInUseAuthorization()` does not trigger the iOS permission dialog when tapped from `locateUser()` in `MapView`. The `.notDetermined` branch calls `location.requestWhenInUse()` but the dialog never appears. Likely needs to be called from a non-async UI context or the OS has already recorded a prior dismissal. Workaround: user must grant permission manually via **Settings → Scout → Location → While Using the App**. | `LocationService.swift`, `MapView.swift` |
+No confirmed open bugs.

@@ -16,6 +16,12 @@ final class LocationService: NSObject, ObservableObject {
         manager.desiredAccuracy   = kCLLocationAccuracyHundredMeters
         manager.distanceFilter    = 100  // only update after moving 100m
         authorizationStatus       = manager.authorizationStatus
+        // If permission was already granted in a previous session, start immediately —
+        // locationManagerDidChangeAuthorization only fires on status *changes*, not on launch.
+        if manager.authorizationStatus == .authorizedWhenInUse ||
+           manager.authorizationStatus == .authorizedAlways {
+            manager.startUpdatingLocation()
+        }
     }
 
     func requestWhenInUse() {
