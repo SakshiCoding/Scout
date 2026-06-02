@@ -18,6 +18,7 @@ struct MarkVisitedSheet: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
     @State private var isLoadingPhotos = false
+    @State private var showCamera = false
 
     private var tileSide: CGFloat {
         (UIScreen.main.bounds.width - 2 * Atlas.screenHPad - 3 * 8) / 4
@@ -64,6 +65,12 @@ struct MarkVisitedSheet: View {
                 }
                 selectedImages = loaded.compactMap { $0 }
                 isLoadingPhotos = false
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image in
+                guard selectedImages.count < 3 else { return }
+                selectedImages.append(image)
             }
         }
     }
@@ -229,6 +236,25 @@ struct MarkVisitedSheet: View {
                                 }
                             }
                         }
+                    }
+
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button { showCamera = true } label: {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Atlas.paper2)
+                                    .frame(width: tileSide, height: tileSide)
+                                VStack(spacing: 4) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 18, weight: .light))
+                                        .foregroundColor(Atlas.ink3)
+                                    Text("Camera")
+                                        .font(Atlas.Font.sans(10))
+                                        .foregroundColor(Atlas.ink3)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
 
