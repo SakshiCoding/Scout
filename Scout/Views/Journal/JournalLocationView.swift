@@ -6,6 +6,10 @@ struct JournalLocationView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showCirclePicker = false
     @State private var showAddEntry = false
+    @State private var showLocationActions = false
+    @State private var showMoveBackConfirm = false
+    @State private var isMovingBack = false
+    @State private var errorMessage: String?
 
     let restaurantId: UUID
 
@@ -82,6 +86,24 @@ struct JournalLocationView: View {
                     .environment(appState)
             }
         }
+        .confirmationDialog("Journal options", isPresented: $showLocationActions) {
+            Button("Move back to wishlist", role: .destructive) {
+                showMoveBackConfirm = true
+            }
+        }
+        .alert("Move back to wishlist?", isPresented: $showMoveBackConfirm) {
+            Button("Move back", role: .destructive) {
+                Task { await moveBackToWishlist() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This removes the place from the journal and permanently deletes its entries, notes, photos, and videos.")
+        }
+        .alert("Couldn't move place", isPresented: errorAlertBinding) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func locationHeader(_ restaurant: Restaurant) -> some View {
@@ -97,6 +119,18 @@ struct JournalLocationView: View {
                 if let circle = appState.activeCircle {
                     CircleAccentRule(circle: circle, label: "JOURNAL")
                 }
+
+                Spacer()
+
+                Button { showLocationActions = true } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Atlas.ink2)
+                        .frame(width: 36, height: 36)
+                        .overlay(Circle().stroke(Atlas.rule, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(isMovingBack)
             }
 
             Text(restaurant.name)
@@ -170,6 +204,26 @@ struct JournalLocationView: View {
         let photoCount = media.filter { $0.mediaType == .photo }.count
         let videoCount = media.filter { $0.mediaType == .video }.count
         return "\(visitCount) visit\(visitCount == 1 ? "" : "s") · \(photoCount) photo\(photoCount == 1 ? "" : "s") · \(videoCount) video\(videoCount == 1 ? "" : "s")"
+    }
+
+    private var errorAlertBinding: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )
+    }
+
+    private func moveBackToWishlist() async {
+        guard !isMovingBack else { return }
+        isMovingBack = true
+        defer { isMovingBack = false }
+
+        do {
+            try await appState.moveRestaurantBackToWishlist(restaurantId: restaurantId)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

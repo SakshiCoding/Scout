@@ -277,6 +277,7 @@ Four tabs with line-drawn icons (1.6pt stroke, burnt orange when active, subdued
   - Polaroid photo cluster: 2–3 polaroids with tape decoration, slight random rotation
   - Italic handwritten-style note in quotes
 - "New entry" dashed-border row at bottom
+- Overflow action: "Move back to wishlist" with destructive confirmation; removes the restaurant's journal entries and attached media before restoring wishlist status
 
 **Empty state (visited but no entries):** Single large blank polaroid with + prompt; "Your first night at [Restaurant]." heading + "Add your first entry" CTA.
 
