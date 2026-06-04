@@ -23,7 +23,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows |
 | `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut |
 | `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
-| `Scout/Views/Journal/` | Journal index, per-restaurant scrapbook, full composer, fullscreen viewer, and cross-post sheet with real visit/media loading, cached photo/video thumbnails, editable metadata, attachments, swipe paging, video playback, sharing, and deletion |
+| `Scout/Views/Journal/` | Journal index, per-restaurant scrapbook, full composer, fullscreen viewer, and cross-post sheet with real visit/media loading, cached photo/video thumbnails, editable metadata, attachments, swipe paging, video playback, sharing, deletion, and moving accidentally visited places back to the wishlist |
 | `Scout/Views/Pick/PickerView.swift` | Swipe pick tab: `PickSession` value-type model, deterministic seed (circleId + date + time-of-day → DJB2 + xorshift64) ensures all circle members see the same 3 restaurants; time-of-day filtering via `establishmentType`; drag gesture with YES/Skip SF-Symbol badges, action buttons (skip/yes/undo), partner status bar, complete/empty states, persistent post-match state with rematch button |
 | `Scout/Views/Pick/MatchView.swift` | Match reveal screen: animated heading + restaurant card + member avatars + "Let's go!" (`onConfirm`) / "Pick again" (`onPickAgain`) two-callback CTAs |
 | `Scout/Views/Circles/` | Circle switcher pill, picker sheet, and new circle sheet |
@@ -209,7 +209,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 4 | `MapView` | Map | Implemented | Full-bleed MapKit map with custom Atlas pins, glass header, bottom peek card |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
 | 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
-| 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, and destructive entry deletion |
+| 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, destructive entry deletion, and moving a place back to the wishlist |
 | 8 | `JournalComposeView` | — | Implemented | Full-screen new entry flow: editable date, occasion, note, vibe chips, removable photo/video attachments, and save |
 | 9 | `JournalViewerView` | — | Implemented | Fullscreen dark photo/video viewer with swipe paging, page dots, caption block, cached thumbnail strip, close/share/overflow controls, deletion, and native video playback |
 | 10 | `MarkVisitedSheet` | — | Implemented | Auto-prompted after "Mark as visited" — rating, photos, and visit note; "Save to journal" creates a Visit record and uploads photos, "Skip for now" marks visited only |
@@ -260,7 +260,7 @@ Phase 1 verified behavior:
 - [x] MarkVisitedSheet (star rating, photos, visit note, Save/Skip; auto-shown after "Mark as visited")
 - [x] Journal read path (`fetchVisits`, `fetchMedia`, private storage download, grouped summaries in `AppState`)
 - [x] JournalIndexView (real data, stats, navigation, empty state)
-- [x] JournalLocationView (scrapbook entries, occasion labels, photo thumbnails, empty state, and entry deletion with storage cleanup)
+- [x] JournalLocationView (scrapbook entries, occasion labels, photo thumbnails, empty state, entry deletion with storage cleanup, and move-back-to-wishlist recovery for accidental visits)
 - [x] JournalComposeView (editable date, occasion, note, vibe tags, photo/video attachment management)
 - [x] JournalViewerView (fullscreen photo/video viewer with swipe paging, captions, thumbnails, and native video playback)
 - [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)

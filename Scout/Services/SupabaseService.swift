@@ -421,9 +421,36 @@ final class SupabaseService {
         }
 
         try await client
+            .from("media")
+            .delete()
+            .eq("visit_id", value: visit.id)
+            .execute()
+
+        try await client
             .from("visits")
             .delete()
             .eq("id", value: visit.id)
+            .execute()
+    }
+
+    func moveRestaurantBackToWishlist(_ restaurantId: UUID, media: [Media]) async throws {
+        let paths = media.map(\.storagePath)
+        if !paths.isEmpty {
+            try await client.storage
+                .from("scout-media")
+                .remove(paths: paths)
+        }
+
+        try await client
+            .from("visits")
+            .delete()
+            .eq("restaurant_id", value: restaurantId)
+            .execute()
+
+        try await client
+            .from("restaurants")
+            .update(["status": Restaurant.RestaurantStatus.wantToTry.rawValue])
+            .eq("id", value: restaurantId)
             .execute()
     }
 

@@ -385,6 +385,23 @@ final class AppState {
         pendingVisitIds.remove(visit.id)
     }
 
+    func moveRestaurantBackToWishlist(restaurantId: UUID) async throws {
+        let restaurantMedia = media.filter { $0.restaurantId == restaurantId }
+        let restaurantVisitIds = Set(visits.filter { $0.restaurantId == restaurantId }.map(\.id))
+
+        try await supabase.moveRestaurantBackToWishlist(restaurantId, media: restaurantMedia)
+
+        restaurantMedia.forEach(mediaService.removeCachedThumbnail)
+        media.removeAll { $0.restaurantId == restaurantId }
+        visits.removeAll { $0.restaurantId == restaurantId }
+        pendingMediaIds.subtract(restaurantMedia.map(\.id))
+        pendingVisitIds.subtract(restaurantVisitIds)
+
+        if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
+            restaurants[idx].status = .wantToTry
+        }
+    }
+
     func crossPostMedia(
         _ item: Media,
         visit: Visit,
