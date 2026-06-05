@@ -1,5 +1,4 @@
 import SwiftUI
-import MapKit
 
 struct RestaurantDetailView: View {
     let restaurantId: UUID
@@ -422,11 +421,12 @@ private struct EditRestaurantSheet: View {
     @State private var cuisine: String
     @State private var establishmentType: Restaurant.EstablishmentType
     @State private var priceTier: Restaurant.PriceTier
-    @State private var suggestions: [MKMapItem]
-    @State private var selectedMapItem: MKMapItem?
+    @State private var suggestions: [PlaceSearchResult]
+    @State private var selectedPlace: PlaceSearchResult?
     @State private var selectedAddress: String?
     @State private var selectedLat: Double?
     @State private var selectedLon: Double?
+    @State private var selectedGooglePlaceId: String?
     @State private var searchTask: Task<Void, Never>?
     @State private var notes: String
     @State private var selectedVibeTags: Set<String>
@@ -448,6 +448,7 @@ private struct EditRestaurantSheet: View {
         self._selectedAddress = State(initialValue: restaurant.address)
         self._selectedLat = State(initialValue: restaurant.latitude)
         self._selectedLon = State(initialValue: restaurant.longitude)
+        self._selectedGooglePlaceId = State(initialValue: restaurant.googlePlaceId)
         self._notes = State(initialValue: restaurant.notes ?? "")
         self._selectedVibeTags = State(initialValue: Set(restaurant.vibeTags))
     }
@@ -464,7 +465,7 @@ private struct EditRestaurantSheet: View {
                             .foregroundColor(Atlas.ink)
                     }
 
-                    if !suggestions.isEmpty && selectedMapItem == nil {
+                    if !suggestions.isEmpty && selectedPlace == nil {
                         suggestionsView
                     } else if let addr = selectedAddress {
                         selectedAddressRow(addr)
@@ -570,7 +571,7 @@ private struct EditRestaurantSheet: View {
 
     private var suggestionsView: some View {
         VStack(spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.offset) { idx, item in
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { idx, item in
                 Button { selectPlace(item) } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "mappin")
@@ -578,12 +579,12 @@ private struct EditRestaurantSheet: View {
                             .foregroundColor(Atlas.burnt)
                             .frame(width: 16)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name ?? "")
+                            Text(item.name)
                                 .font(Atlas.Font.serif(15))
                                 .foregroundColor(Atlas.ink)
                                 .lineLimit(1)
-                            if !item.displayAddress.isEmpty {
-                                Text(item.displayAddress)
+                            if let address = item.address {
+                                Text(address)
                                     .font(Atlas.Font.sans(12))
                                     .foregroundColor(Atlas.ink2)
                             }
@@ -603,6 +604,15 @@ private struct EditRestaurantSheet: View {
                         .background(Atlas.rule)
                         .padding(.leading, Atlas.screenHPad + 28)
                 }
+            }
+
+            if suggestions.contains(where: { $0.provider == .google }) {
+                Text("POWERED BY GOOGLE")
+                    .font(Atlas.Font.sans(9.5, weight: .medium))
+                    .foregroundColor(Atlas.ink3)
+                    .kerning(1.2)
+                    .padding(.horizontal, Atlas.screenHPad)
+                    .padding(.vertical, 8)
             }
         }
         .background(Atlas.paper2)
@@ -635,7 +645,7 @@ private struct EditRestaurantSheet: View {
     }
 
     private func handleNameChange(_ newValue: String) {
-        if let item = selectedMapItem, item.name == newValue { return }
+        if let item = selectedPlace, item.name == newValue { return }
 
         clearSelectedPlace()
         searchForPlace(named: newValue)
@@ -659,30 +669,35 @@ private struct EditRestaurantSheet: View {
         }
     }
 
-    private func selectPlace(_ item: MKMapItem) {
-        selectedMapItem = item
-        if let placeName = item.name { name = placeName }
-        let addr = item.displayAddress
-        selectedAddress = addr.isEmpty ? nil : addr
-        selectedLat = item.placemark.coordinate.latitude
-        selectedLon = item.placemark.coordinate.longitude
+    private func selectPlace(_ item: PlaceSearchResult) {
+        selectedPlace = item
+        name = item.name
+        selectedAddress = item.address
+        selectedLat = item.latitude
+        selectedLon = item.longitude
+        selectedGooglePlaceId = item.googlePlaceId
 
-        if let category = item.pointOfInterestCategory {
-            if let detectedType = category.establishmentTypeHint {
-                establishmentType = detectedType
-            }
-            selectedVibeTags.formUnion(category.vibeHints)
+        if let detectedType = item.establishmentType {
+            establishmentType = detectedType
         }
+        if let detectedCuisine = item.cuisine, cuisine.isEmpty {
+            cuisine = detectedCuisine
+        }
+        if let detectedPrice = item.priceTier {
+            priceTier = detectedPrice
+        }
+        selectedVibeTags.formUnion(item.vibeHints)
 
         suggestions = []
         searchTask?.cancel()
     }
 
     private func clearSelectedPlace() {
-        selectedMapItem = nil
+        selectedPlace = nil
         selectedAddress = nil
         selectedLat = nil
         selectedLon = nil
+        selectedGooglePlaceId = nil
     }
 
     private func save() async {
@@ -696,6 +711,7 @@ private struct EditRestaurantSheet: View {
         updated.address = selectedAddress
         updated.latitude = selectedLat
         updated.longitude = selectedLon
+        updated.googlePlaceId = selectedGooglePlaceId
         updated.notes = notes.isEmpty ? nil : notes
         updated.vibeTags = Array(selectedVibeTags)
         do {

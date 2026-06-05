@@ -74,6 +74,7 @@ final class SupabaseService {
         let restaurantRating: Double?
         let restaurantPhotoUrl: String?
         let restaurantEstablishmentType: String
+        let restaurantGooglePlaceId: String?
 
         enum CodingKeys: String, CodingKey {
             case restaurantCircleId          = "restaurant_circle_id"
@@ -88,6 +89,7 @@ final class SupabaseService {
             case restaurantRating            = "restaurant_rating"
             case restaurantPhotoUrl          = "restaurant_photo_url"
             case restaurantEstablishmentType = "restaurant_establishment_type"
+            case restaurantGooglePlaceId     = "restaurant_google_place_id"
         }
     }
 
@@ -191,14 +193,15 @@ final class SupabaseService {
                     restaurantName: restaurant.name,
                     restaurantCuisine: restaurant.cuisine,
                     restaurantPriceTier: restaurant.priceTier?.rawValue,
-                    restaurantAddress: restaurant.address,
-                    restaurantLatitude: restaurant.latitude,
-                    restaurantLongitude: restaurant.longitude,
+                    restaurantAddress: restaurant.googlePlaceId == nil ? restaurant.address : nil,
+                    restaurantLatitude: restaurant.googlePlaceId == nil ? restaurant.latitude : nil,
+                    restaurantLongitude: restaurant.googlePlaceId == nil ? restaurant.longitude : nil,
                     restaurantNotes: restaurant.notes,
                     restaurantVibeTags: restaurant.vibeTags,
                     restaurantRating: restaurant.rating,
                     restaurantPhotoUrl: restaurant.photoUrl,
-                    restaurantEstablishmentType: restaurant.establishmentType.rawValue
+                    restaurantEstablishmentType: restaurant.establishmentType.rawValue,
+                    restaurantGooglePlaceId: restaurant.googlePlaceId
                 )
             )
             .execute()
@@ -231,11 +234,13 @@ final class SupabaseService {
             let notes: String?
             let vibeTags: [String]
             let establishmentType: String
+            let googlePlaceId: String?
             enum CodingKeys: String, CodingKey {
                 case name, cuisine, address, latitude, longitude, notes
                 case priceTier        = "price_tier"
                 case vibeTags         = "vibe_tags"
                 case establishmentType = "establishment_type"
+                case googlePlaceId     = "google_place_id"
             }
 
             func encode(to encoder: Encoder) throws {
@@ -249,6 +254,7 @@ final class SupabaseService {
                 try container.encodeNullable(notes, forKey: .notes)
                 try container.encode(vibeTags, forKey: .vibeTags)
                 try container.encode(establishmentType, forKey: .establishmentType)
+                try container.encodeNullable(googlePlaceId, forKey: .googlePlaceId)
             }
         }
 
@@ -258,12 +264,13 @@ final class SupabaseService {
                 name: restaurant.name,
                 cuisine: restaurant.cuisine,
                 priceTier: restaurant.priceTier?.rawValue,
-                address: restaurant.address,
-                latitude: restaurant.latitude,
-                longitude: restaurant.longitude,
+                address: restaurant.googlePlaceId == nil ? restaurant.address : nil,
+                latitude: restaurant.googlePlaceId == nil ? restaurant.latitude : nil,
+                longitude: restaurant.googlePlaceId == nil ? restaurant.longitude : nil,
                 notes: restaurant.notes,
                 vibeTags: restaurant.vibeTags,
-                establishmentType: restaurant.establishmentType.rawValue
+                establishmentType: restaurant.establishmentType.rawValue,
+                googlePlaceId: restaurant.googlePlaceId
             ))
             .eq("id", value: restaurant.id)
             .execute()

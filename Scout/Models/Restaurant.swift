@@ -16,6 +16,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
     var vibeTags: [String]
     var rating: Double?
     var photoUrl: String?
+    var googlePlaceId: String?
     var addedBy: UUID?
     let createdAt: Date
 
@@ -72,6 +73,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
         case priceTier        = "price_tier"
         case vibeTags         = "vibe_tags"
         case photoUrl         = "photo_url"
+        case googlePlaceId    = "google_place_id"
         case addedBy          = "added_by"
         case createdAt        = "created_at"
     }
@@ -93,6 +95,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
         vibeTags   = try c.decodeIfPresent([String].self, forKey: .vibeTags) ?? []
         rating     = try c.decodeIfPresent(Double.self,   forKey: .rating)
         photoUrl   = try c.decodeIfPresent(String.self,   forKey: .photoUrl)
+        googlePlaceId = try c.decodeIfPresent(String.self, forKey: .googlePlaceId)
         addedBy    = try c.decodeIfPresent(UUID.self,     forKey: .addedBy)
         createdAt  = try c.decode(Date.self,              forKey: .createdAt)
     }
@@ -113,6 +116,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
         try c.encode(vibeTags,           forKey: .vibeTags)
         try c.encodeIfPresent(rating,    forKey: .rating)
         try c.encodeIfPresent(photoUrl,  forKey: .photoUrl)
+        try c.encodeIfPresent(googlePlaceId, forKey: .googlePlaceId)
         try c.encodeIfPresent(addedBy,   forKey: .addedBy)
         try c.encode(createdAt,          forKey: .createdAt)
     }
@@ -131,6 +135,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
          vibeTags: [String] = [],
          rating: Double? = nil,
          photoUrl: String? = nil,
+         googlePlaceId: String? = nil,
          addedBy: UUID? = nil,
          createdAt: Date = Date(),
          distanceMiles: Double? = nil) {
@@ -148,6 +153,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
         self.vibeTags          = vibeTags
         self.rating            = rating
         self.photoUrl          = photoUrl
+        self.googlePlaceId     = googlePlaceId
         self.addedBy           = addedBy
         self.createdAt         = createdAt
         self.distanceMiles     = distanceMiles

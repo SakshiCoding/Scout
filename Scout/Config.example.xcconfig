@@ -1,0 +1,6 @@
+// Copy to Config.xcconfig and fill in local development values.
+// Config.xcconfig is intentionally ignored by git.
+
+SUPABASE_URL = https://your-project.supabase.co
+SUPABASE_ANON_KEY = your-supabase-anon-key
+GOOGLE_MAPS_API_KEY = your-ios-restricted-google-maps-platform-api-key

@@ -2,7 +2,7 @@
 
 > **Standing rule:** After implementing any feature, always update CLAUDE.md and AGENTS.md to reflect what was built — file table, UI screens table, Phase checklist. This is automatic, not optional, and does not need to be prompted by the user each time.
 
-Scout is a shared restaurant wishlist iOS app organized around **circles** — named groups (couples, families, roommates, travel crews) each with their own wishlist, map, swipe picker, and photo journal. Built with SwiftUI + Supabase + MapKit + CoreLocation + Apple Places API + Google Gemini API.
+Scout is a shared restaurant wishlist iOS app organized around **circles** — named groups (couples, families, roommates, travel crews) each with their own wishlist, map, swipe picker, and photo journal. Built with SwiftUI + Supabase + Google Maps SDK for iOS + CoreLocation + Google Places SDK for iOS + Google Gemini API.
 
 ---
 
@@ -13,16 +13,19 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | File | Status |
 |------|--------|
 | `Scout/ScoutApp.swift` | App entry point; creates and injects `AppState` |
-| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, and pick match persistence (`activePickMatch`, `savePickMatch`, `clearPickMatch`, `restorePickMatch`) |
-| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; includes journal reads, private storage downloads, and direct picks table access (`savePick`, `fetchTodayPick`) |
+| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, Google Place detail refreshes, and pick match persistence (`activePickMatch`, `savePickMatch`, `clearPickMatch`, `restorePickMatch`) |
+| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; persists Google Place IDs, includes journal reads, private storage downloads, and direct picks table access (`savePick`, `fetchTodayPick`) |
 | `Scout/Services/AuthService.swift` | Auth session handling and sign-in flows |
 | `Scout/Services/LocationService.swift` | Location permissions and distance sorting |
+| `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results and enrichment hints |
+| `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Views/Root/RootView.swift` | Auth gate and custom tab shell |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows |
 | `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut |
 | `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
+| `Scout/Views/Map/MapView.swift` | Google Maps SDK map wrapper, custom Atlas markers, camera controls, filters, user location, and restaurant peek card |
 | `Scout/Views/Journal/` | Journal index, per-restaurant scrapbook, full composer, fullscreen viewer, and cross-post sheet with real visit/media loading, cached photo/video thumbnails, editable metadata, attachments, swipe paging, video playback, sharing, deletion, and moving accidentally visited places back to the wishlist |
 | `Scout/Views/Pick/PickerView.swift` | Swipe pick tab: `PickSession` value-type model, deterministic seed (circleId + date + time-of-day → DJB2 + xorshift64) ensures all circle members see the same 3 restaurants; time-of-day filtering via `establishmentType`; drag gesture with YES/Skip SF-Symbol badges, action buttons (skip/yes/undo), partner status bar, complete/empty states, persistent post-match state with rematch button |
 | `Scout/Views/Pick/MatchView.swift` | Match reveal screen: animated heading + restaurant card + member avatars + "Let's go!" (`onConfirm`) / "Pick again" (`onPickAgain`) two-callback CTAs |
@@ -30,7 +33,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Shared/` | Shared small UI components and Atlas icons |
 | `Scout/Models/` | Circle, restaurant, visit, and media models |
 
-Supabase Swift is already added through Swift Package Manager. Do not remove or recreate package dependencies unless the task explicitly requires it.
+Supabase Swift, Google Places SDK, and Google Maps SDK are added through Swift Package Manager. Do not remove or recreate package dependencies unless the task explicitly requires it.
 
 ### Architecture Preservation Rules
 
@@ -55,9 +58,9 @@ Before making changes, read the current files related to the task and preserve t
 | UI | SwiftUI |
 | Database + Auth + Storage | Supabase (Postgres + Supabase Auth + Supabase Storage) |
 | Auth method | Sign in with Apple → Supabase Auth |
-| Maps | MapKit |
+| Maps | Google Maps SDK for iOS |
 | Location | CoreLocation |
-| Places enrichment | Apple Places API |
+| Places enrichment | Google Places SDK for iOS (Text Search New), with Apple local-search fallback |
 | AI parsing | Google Gemini API (Phase 3 only — TikTok captions) |
 | Notifications | UserNotifications |
 | Extensions | Share Extension, WidgetKit |
@@ -193,6 +196,8 @@ The schema lives in `supabase/migrations/`. Current circle and restaurant creati
 
 Journal photos and videos use the private `scout-media` Supabase Storage bucket. Migration `20260601000000_add_scout_media_storage_policies.sql` creates the bucket and circle-member read/upload/delete policies. Migration `20260601001000_add_visit_journal_fields.sql` adds visit `occasion` and `vibe_tags` fields and extends the `add_visit` RPC payload. Migration `20260601002000_repair_journal_media_policies.sql` idempotently repairs storage and `public.media` policies for databases whose initial schema was applied manually. Migration `20260601003000_repair_journal_visit_policies.sql` repairs `public.visits` read/write policies so persisted entries remain visible after reload. Apply pending migrations before testing journal entry creation or media upload/download.
 
+Migration `20260604000000_add_google_places_metadata.sql` adds `google_place_id` to restaurants and extends the `add_restaurant` RPC. Scout persists Place IDs for Google-linked restaurants, then refreshes Google address and coordinates into memory for display on the Google map instead of treating cached coordinates as the long-term source of truth. To enable the integration, enable Places API (New) and Maps SDK for iOS in Google Cloud, create an iOS-restricted API key for Scout's bundle identifier, and set `GOOGLE_MAPS_API_KEY` in the ignored `Scout/Config.xcconfig` file. Use `Scout/Config.example.xcconfig` as the template.
+
 Confirmed journal visits and uploaded media are merged into `AppState` immediately and preserved while the network refresh reconciles with Supabase. Keep this optimistic merge behavior when changing journal loading so a delayed response cannot make a newly saved entry disappear.
 
 ---
@@ -203,10 +208,10 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
-| 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance |
+| 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; add flow uses Google Places search and persists Place IDs when configured |
 | 2 | `RestaurantDetailView` | — | Implemented (Phase 2) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, reservation deep links (OpenTable/Resy) |
 | 3 | `PickerView` + `MatchView` | Pick | Implemented (Phase 2) | Swipe-based pick: `PickSession` draws a deterministic deck of 3 restaurants (seeded by circleId + calendar date + time-of-day so all circle members see the same set); time-of-day filtering via `establishmentType` (morning/lunch/dinner windows); SF-Symbol heart badge on yes button; simulated partner progress; on mutual match `MatchView` animates in; post-match: Pick tab shows matched restaurant persistently with a shuffle rematch button top-trailing; match saved to Supabase `picks` table (one per circle per day) + UserDefaults offline cache; `MatchView` has `onConfirm`/`onPickAgain` callbacks |
-| 4 | `MapView` | Map | Implemented | Full-bleed MapKit map with custom Atlas pins, glass header, bottom peek card |
+| 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, user location, and filter wiring |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
 | 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
 | 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, destructive entry deletion, and moving a place back to the wishlist |
@@ -253,9 +258,9 @@ Phase 1 verified behavior:
 ### Phase 2 — Enrichment & Core Features
 > Make the app genuinely useful day-to-day
 
-- [x] PlacesService (Apple Places API — name search + geocoding + POI category hints; cuisine autofill deferred to Phase 3)
+- [x] PlacesService (Google Places SDK Text Search New, persisted Place IDs, transient location enrichment, cuisine/type hints, and Apple local-search fallback)
 - [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited, delete; no photos/hours/Places enrichment yet)
-- [x] MapView (MapKit pins — per-type colors, glass header, peek card, user location, filter wiring)
+- [x] MapView (Google Maps SDK pins — per-type colors, glass header, peek card, user location, filter wiring)
 - [x] Visited tracking + notes + rating (`markVisitedWithRecord` in AppState; writes Visit row + updates restaurant rating)
 - [x] MarkVisitedSheet (star rating, photos, visit note, Save/Skip; auto-shown after "Mark as visited")
 - [x] Journal read path (`fetchVisits`, `fetchMedia`, private storage download, grouped summaries in `AppState`)
@@ -274,7 +279,7 @@ Phase 1 verified behavior:
 - [ ] Share Extension (Safari + Apple Maps)
 - [ ] TikTok Share Extension
 - [ ] GeminiService (Google Gemini API — caption parsing from TikTok/social)
-- [ ] Gemini cuisine + vibe autofill from restaurant name (when Apple Places category is too generic)
+- [ ] Gemini cuisine + vibe autofill from restaurant name (when Google Places types are too generic)
 - [ ] ScoutWidget (WidgetKit)
 - [ ] Siri Shortcut
 - [ ] App icon + branding assets

@@ -1,5 +1,4 @@
 import SwiftUI
-import MapKit
 import Supabase
 
 struct AddRestaurantView: View {
@@ -18,11 +17,12 @@ struct AddRestaurantView: View {
     @State private var errorMessage: String?
 
     // Place search
-    @State private var suggestions: [MKMapItem]  = []
-    @State private var selectedMapItem: MKMapItem?
+    @State private var suggestions: [PlaceSearchResult]  = []
+    @State private var selectedPlace: PlaceSearchResult?
     @State private var selectedAddress: String?
     @State private var selectedLat: Double?
     @State private var selectedLon: Double?
+    @State private var selectedGooglePlaceId: String?
     @State private var searchTask: Task<Void, Never>?
 
     private let popularCuisines = [
@@ -55,7 +55,7 @@ struct AddRestaurantView: View {
                     }
 
                     // Inline suggestions or selected address chip
-                    if !suggestions.isEmpty && selectedMapItem == nil {
+                    if !suggestions.isEmpty && selectedPlace == nil {
                         suggestionsView
                     } else if let addr = selectedAddress {
                         selectedAddressRow(addr)
@@ -224,7 +224,7 @@ struct AddRestaurantView: View {
 
     private var suggestionsView: some View {
         VStack(spacing: 0) {
-            ForEach(Array(suggestions.enumerated()), id: \.offset) { idx, item in
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { idx, item in
                 Button { selectPlace(item) } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "mappin")
@@ -232,12 +232,12 @@ struct AddRestaurantView: View {
                             .foregroundColor(Atlas.burnt)
                             .frame(width: 16)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name ?? "")
+                            Text(item.name)
                                 .font(Atlas.Font.serif(15))
                                 .foregroundColor(Atlas.ink)
                                 .lineLimit(1)
-                            if !item.displayAddress.isEmpty {
-                                Text(item.displayAddress)
+                            if let address = item.address {
+                                Text(address)
                                     .font(Atlas.Font.sans(12))
                                     .foregroundColor(Atlas.ink2)
                             }
@@ -257,6 +257,15 @@ struct AddRestaurantView: View {
                         .background(Atlas.rule)
                         .padding(.leading, Atlas.screenHPad + 28)
                 }
+            }
+
+            if suggestions.contains(where: { $0.provider == .google }) {
+                Text("POWERED BY GOOGLE")
+                    .font(Atlas.Font.sans(9.5, weight: .medium))
+                    .foregroundColor(Atlas.ink3)
+                    .kerning(1.2)
+                    .padding(.horizontal, Atlas.screenHPad)
+                    .padding(.vertical, 8)
             }
         }
         .background(Atlas.paper2)
@@ -290,7 +299,7 @@ struct AddRestaurantView: View {
     // MARK: - Place search logic
 
     private func handleNameChange(_ newValue: String) {
-        if let item = selectedMapItem, item.name == newValue { return }
+        if let item = selectedPlace, item.name == newValue { return }
 
         clearSelectedPlace()
         searchTask?.cancel()
@@ -310,34 +319,43 @@ struct AddRestaurantView: View {
         }
     }
 
-    private func selectPlace(_ item: MKMapItem) {
-        selectedMapItem = item
-        if let placeName = item.name { name = placeName }
-        let addr = item.displayAddress
-        selectedAddress = addr.isEmpty ? nil : addr
-        selectedLat = item.placemark.coordinate.latitude
-        selectedLon = item.placemark.coordinate.longitude
+    private func selectPlace(_ item: PlaceSearchResult) {
+        selectedPlace = item
+        name = item.name
+        selectedAddress = item.address
+        selectedLat = item.latitude
+        selectedLon = item.longitude
+        selectedGooglePlaceId = item.googlePlaceId
 
-        if let category = item.pointOfInterestCategory {
-            // Auto-set establishment type from POI category
-            if let detectedType = category.establishmentTypeHint {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    establishmentType = detectedType
-                }
+        if let detectedType = item.establishmentType {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                establishmentType = detectedType
             }
-            // Auto-apply vibe tags
-            selectedVibeTags.formUnion(category.vibeHints)
         }
+        if let detectedCuisine = item.cuisine, cuisine.isEmpty, cuisineOtherText.isEmpty {
+            if popularCuisines.contains(detectedCuisine) {
+                cuisine = detectedCuisine
+                showCuisineOtherField = false
+            } else {
+                cuisineOtherText = detectedCuisine
+                showCuisineOtherField = true
+            }
+        }
+        if let detectedPrice = item.priceTier {
+            priceTier = detectedPrice
+        }
+        selectedVibeTags.formUnion(item.vibeHints)
 
         suggestions = []
         searchTask?.cancel()
     }
 
     private func clearSelectedPlace() {
-        selectedMapItem = nil
+        selectedPlace = nil
         selectedAddress = nil
         selectedLat = nil
         selectedLon = nil
+        selectedGooglePlaceId = nil
     }
 
     // MARK: - Save
@@ -361,6 +379,7 @@ struct AddRestaurantView: View {
             longitude: selectedLon,
             notes: notes.isEmpty ? nil : notes,
             vibeTags: Array(selectedVibeTags),
+            googlePlaceId: selectedGooglePlaceId,
             addedBy: userId
         )
         do {

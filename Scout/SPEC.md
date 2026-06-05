@@ -11,9 +11,9 @@
 | Database | Supabase (Postgres) |
 | Auth | Supabase Auth + Sign in with Apple |
 | Storage | Supabase Storage (photos/videos) |
-| Maps | MapKit |
+| Maps | Google Maps SDK for iOS |
 | Location | CoreLocation |
-| Places Data | Apple Places API |
+| Places Data | Google Places SDK for iOS (Apple local-search fallback) |
 | AI Parsing | Google Gemini API |
 | Notifications | UserNotifications |
 | Extensions | Share Extension, WidgetKit |
@@ -63,7 +63,7 @@ Each circle has:
 | Circle switcher pill (global, top of every screen) | v1 |
 | Mark as visited + personal notes | v1 |
 | Personal rating per visit | v1 |
-| Full map view with pins (MapKit) | v1 |
+| Full map view with pins (Google Maps SDK) | v1 |
 | Top dishes / menu highlights | v2 |
 | Direct reservation link (OpenTable/Resy) | v2 |
 | Pick for Us swipe feature | v2 |
@@ -114,9 +114,9 @@ Backend note: Supabase migrations live in `supabase/migrations/`. Circle and res
 ### Phase 2 — Enrichment & Core Features
 > Goal: make the app genuinely useful day-to-day
 
-- [ ] PlacesService (Apple Places API integration)
+- [x] PlacesService (Google Places Text Search New, persisted Place IDs, and enrichment hints)
 - [ ] Rich info card (hours, open now, dishes, rating, photo)
-- [ ] MapView (MapKit pins)
+- [x] MapView (Google Maps SDK pins)
 - [x] Visited tracking + notes + rating
 - [x] MarkVisitedSheet (auto-prompt after marking visited)
 - [x] JournalIndexView (table of contents per circle)
