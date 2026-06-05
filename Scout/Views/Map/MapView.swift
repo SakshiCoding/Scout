@@ -1,6 +1,7 @@
 import SwiftUI
-import MapKit
 import CoreLocation
+import GoogleMaps
+import UIKit
 
 struct MapView: View {
     @Environment(AppState.self) private var appState
@@ -9,11 +10,14 @@ struct MapView: View {
     @State private var navigatingTo: Restaurant?
     @State private var showFilters = false
     @State private var showCirclePicker = false
-    @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var cameraRequest = GoogleMapCameraRequest(
+        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+        zoom: 12
+    )
     @State private var hasInitiallyLocated = false
     @State private var locationAuthStatus: CLAuthorizationStatus = .notDetermined
     @State private var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194)
-    @State private var mapSpan: MKCoordinateSpan = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    @State private var mapZoom: Float = 12
 
     private var mappableRestaurants: [Restaurant] {
         let base = appState.restaurants.filter { $0.coordinate != nil && appState.filterState.matches($0) }
@@ -73,10 +77,7 @@ struct MapView: View {
         .onReceive(appState.location.$userLocation) { newLoc in
             guard let loc = newLoc, !hasInitiallyLocated else { return }
             hasInitiallyLocated = true
-            cameraPosition = .region(MKCoordinateRegion(
-                center: loc.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-            ))
+            cameraRequest = GoogleMapCameraRequest(center: loc.coordinate, zoom: 13)
         }
     }
 
@@ -91,37 +92,16 @@ struct MapView: View {
                 appState.location.startUpdating()
                 return
             }
-            withAnimation(.easeInOut(duration: 0.5)) {
-                cameraPosition = .region(MKCoordinateRegion(
-                    center: loc.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                ))
-            }
+            cameraRequest = GoogleMapCameraRequest(center: loc.coordinate, zoom: max(mapZoom, 13))
         }
     }
 
     private func zoomIn() {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            cameraPosition = .region(MKCoordinateRegion(
-                center: mapCenter,
-                span: MKCoordinateSpan(
-                    latitudeDelta: max(mapSpan.latitudeDelta / 2, 0.001),
-                    longitudeDelta: max(mapSpan.longitudeDelta / 2, 0.001)
-                )
-            ))
-        }
+        cameraRequest = GoogleMapCameraRequest(center: mapCenter, zoom: min(mapZoom + 1, 21))
     }
 
     private func zoomOut() {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            cameraPosition = .region(MKCoordinateRegion(
-                center: mapCenter,
-                span: MKCoordinateSpan(
-                    latitudeDelta: min(mapSpan.latitudeDelta * 2, 60),
-                    longitudeDelta: min(mapSpan.longitudeDelta * 2, 60)
-                )
-            ))
-        }
+        cameraRequest = GoogleMapCameraRequest(center: mapCenter, zoom: max(mapZoom - 1, 2))
     }
 
     private var zoomControls: some View {
@@ -155,32 +135,28 @@ struct MapView: View {
 
     // MARK: - Map
 
+    @ViewBuilder
     private var mapLayer: some View {
-        Map(position: $cameraPosition) {
-            UserAnnotation()
-            ForEach(mappableRestaurants) { r in
-                Annotation("", coordinate: r.coordinate!, anchor: .bottom) {
-                    RestaurantPinView(
-                        name: r.name,
-                        isSelected: selectedPin?.id == r.id,
-                        distance: r.formattedDistance,
-                        accentColor: r.establishmentType.pinColor
-                    )
-                    .onTapGesture {
-                        withAnimation(.spring(duration: 0.25)) {
-                            selectedPin = (selectedPin?.id == r.id) ? nil : r
-                        }
-                    }
+        if GoogleMapsConfiguration.configureIfPossible() {
+            GoogleRestaurantMap(
+                restaurants: mappableRestaurants,
+                selectedRestaurant: $selectedPin,
+                cameraRequest: cameraRequest,
+                mapCenter: $mapCenter,
+                mapZoom: $mapZoom,
+                showsUserLocation: locationAuthStatus == .authorizedWhenInUse || locationAuthStatus == .authorizedAlways
+            )
+            .ignoresSafeArea()
+        } else {
+            Atlas.paper
+                .ignoresSafeArea()
+                .overlay {
+                    Text("Add a Google Maps API key to show the map.")
+                        .font(Atlas.Font.sans(13))
+                        .foregroundColor(Atlas.ink2)
+                        .padding(24)
                 }
-            }
         }
-        .mapStyle(.standard)
-        .mapControls { }
-        .onMapCameraChange { context in
-            mapCenter = context.region.center
-            mapSpan   = context.region.span
-        }
-        .ignoresSafeArea()
     }
 
     // MARK: - Floating header
@@ -287,6 +263,132 @@ struct MapView: View {
     private func countChipText(_ count: Int) -> String {
         let base = "\(count) place\(count == 1 ? "" : "s")"
         return appState.filterState.isActive ? "\(base) · Filtered" : base
+    }
+}
+
+private struct GoogleMapCameraRequest: Equatable {
+    let id = UUID()
+    let center: CLLocationCoordinate2D
+    let zoom: Float
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+private struct GoogleRestaurantMap: UIViewRepresentable {
+    let restaurants: [Restaurant]
+    @Binding var selectedRestaurant: Restaurant?
+    let cameraRequest: GoogleMapCameraRequest
+    @Binding var mapCenter: CLLocationCoordinate2D
+    @Binding var mapZoom: Float
+    let showsUserLocation: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> GMSMapView {
+        let camera = GMSCameraPosition.camera(
+            withTarget: cameraRequest.center,
+            zoom: cameraRequest.zoom
+        )
+        let options = GMSMapViewOptions()
+        options.camera = camera
+        options.backgroundColor = UIColor(Atlas.paper)
+        let mapView = GMSMapView(options: options)
+        mapView.delegate = context.coordinator
+        mapView.mapType = .normal
+        mapView.isBuildingsEnabled = false
+        mapView.settings.compassButton = false
+        mapView.settings.myLocationButton = false
+        mapView.settings.zoomGestures = true
+        mapView.settings.scrollGestures = true
+        mapView.settings.rotateGestures = false
+        mapView.settings.tiltGestures = false
+        mapView.padding = UIEdgeInsets(top: 110, left: 0, bottom: 110, right: 0)
+        context.coordinator.renderMarkers(on: mapView)
+        context.coordinator.lastCameraRequestId = cameraRequest.id
+        return mapView
+    }
+
+    func updateUIView(_ mapView: GMSMapView, context: Context) {
+        context.coordinator.parent = self
+        mapView.isMyLocationEnabled = showsUserLocation
+        context.coordinator.renderMarkers(on: mapView)
+
+        guard context.coordinator.lastCameraRequestId != cameraRequest.id else { return }
+        context.coordinator.lastCameraRequestId = cameraRequest.id
+        mapView.animate(to: GMSCameraPosition.camera(
+            withTarget: cameraRequest.center,
+            zoom: cameraRequest.zoom
+        ))
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, GMSMapViewDelegate {
+        var parent: GoogleRestaurantMap
+        var lastCameraRequestId: UUID?
+
+        init(parent: GoogleRestaurantMap) {
+            self.parent = parent
+        }
+
+        func renderMarkers(on mapView: GMSMapView) {
+            mapView.clear()
+
+            for restaurant in parent.restaurants {
+                guard let coordinate = restaurant.coordinate else { continue }
+                let marker = GMSMarker(position: coordinate)
+                marker.userData = restaurant.id
+                marker.groundAnchor = CGPoint(x: 0.5, y: 1)
+                marker.icon = markerImage(
+                    for: restaurant,
+                    isSelected: parent.selectedRestaurant?.id == restaurant.id
+                )
+                marker.map = mapView
+            }
+        }
+
+        func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {
+            guard let restaurantId = marker.userData as? UUID,
+                  let restaurant = parent.restaurants.first(where: { $0.id == restaurantId }) else {
+                return false
+            }
+            withAnimation(.spring(duration: 0.25)) {
+                parent.selectedRestaurant = parent.selectedRestaurant?.id == restaurantId ? nil : restaurant
+            }
+            renderMarkers(on: mapView)
+            return true
+        }
+
+        func mapView(_ mapView: GMSMapView, didTapAt coordinate: CLLocationCoordinate2D) {
+            if parent.selectedRestaurant != nil {
+                withAnimation(.spring(duration: 0.25)) {
+                    parent.selectedRestaurant = nil
+                }
+                renderMarkers(on: mapView)
+            }
+        }
+
+        func mapView(_ mapView: GMSMapView, idleAt position: GMSCameraPosition) {
+            parent.mapCenter = position.target
+            parent.mapZoom = position.zoom
+        }
+
+        private func markerImage(for restaurant: Restaurant, isSelected: Bool) -> UIImage? {
+            let renderer = ImageRenderer(content:
+                RestaurantPinView(
+                    name: restaurant.name,
+                    isSelected: isSelected,
+                    distance: restaurant.formattedDistance,
+                    accentColor: restaurant.establishmentType.pinColor
+                )
+                .padding(8)
+            )
+            renderer.scale = UIScreen.main.scale
+            return renderer.uiImage
+        }
     }
 }
 

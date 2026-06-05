@@ -99,6 +99,7 @@ final class AppState {
     let supabase  = SupabaseService.shared
     let auth      = AuthService()
     let location  = LocationService()
+    let places    = PlacesService.shared
     let mediaService = MediaService()
 
     init() {
@@ -156,7 +157,8 @@ final class AppState {
         guard let circleId = activeCircle?.id else { return }
         isLoadingRestaurants = true
         do {
-            restaurants = try await supabase.fetchRestaurants(circleId: circleId)
+            let fetched = try await supabase.fetchRestaurants(circleId: circleId)
+            restaurants = await places.enrichGoogleRestaurants(fetched)
         } catch {
             restaurants = []
         }
@@ -235,8 +237,9 @@ final class AppState {
 
     func addRestaurant(_ restaurant: Restaurant) async throws {
         let saved = try await supabase.addRestaurant(restaurant)
+        let enriched = await places.enrichGoogleRestaurant(saved) ?? saved
         activeTab = .wantToTry
-        restaurants.insert(saved, at: 0)
+        restaurants.insert(enriched, at: 0)
     }
 
     func bulkImport(names: [String]) async throws {
@@ -432,6 +435,7 @@ final class AppState {
                 vibeTags: restaurant.vibeTags,
                 rating: restaurant.rating,
                 photoUrl: restaurant.photoUrl,
+                googlePlaceId: restaurant.googlePlaceId,
                 addedBy: userId
             ))
         }

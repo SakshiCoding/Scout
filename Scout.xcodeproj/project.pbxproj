@@ -13,6 +13,8 @@
 		0C1788F12FB6CBAA005C3190 /* DMSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F02FB6CBAA005C3190 /* DMSans-Regular.ttf */; };
 		0C1788F32FB6CBD1005C3190 /* DMSans-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F22FB6CBD1005C3190 /* DMSans-SemiBold.ttf */; };
 		0C1788F52FB6CBF6005C3190 /* DMSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F42FB6CBF6005C3190 /* DMSans-Medium.ttf */; };
+		A10000012FE0000000000001 /* GooglePlaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000022FE0000000000002 /* GooglePlaces */; };
+		A10000042FE0000000000004 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = A10000052FE0000000000005 /* GoogleMaps */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -67,6 +69,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000042FE0000000000004 /* GoogleMaps in Frameworks */,
+				A10000012FE0000000000001 /* GooglePlaces in Frameworks */,
 				0C1788EA2FB6C90E005C3190 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -115,6 +119,8 @@
 			);
 			name = Scout;
 			packageProductDependencies = (
+				A10000052FE0000000000005 /* GoogleMaps */,
+				A10000022FE0000000000002 /* GooglePlaces */,
 				0C1788E92FB6C90E005C3190 /* Supabase */,
 			);
 			productName = Scout;
@@ -146,6 +152,8 @@
 			mainGroup = 1C8ED52C2FB3B5890059C826;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A10000062FE0000000000006 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */,
+				A10000032FE0000000000003 /* XCRemoteSwiftPackageReference "ios-places-sdk" */,
 				0C1788E82FB6C90E005C3190 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -422,6 +430,22 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		A10000032FE0000000000003 /* XCRemoteSwiftPackageReference "ios-places-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googlemaps/ios-places-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.0.0;
+			};
+		};
+		A10000062FE0000000000006 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googlemaps/ios-maps-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -429,6 +453,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0C1788E82FB6C90E005C3190 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		A10000022FE0000000000002 /* GooglePlaces */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000032FE0000000000003 /* XCRemoteSwiftPackageReference "ios-places-sdk" */;
+			productName = GooglePlaces;
+		};
+		A10000052FE0000000000005 /* GoogleMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10000062FE0000000000006 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */;
+			productName = GoogleMaps;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
