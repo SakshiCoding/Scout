@@ -23,6 +23,15 @@ struct PlaceSearchResult: Identifiable, Hashable {
     let vibeHints: Set<String>
 }
 
+struct PlaceContactDetails: Hashable {
+    let websiteURL: URL?
+    let phoneNumber: String?
+
+    var hasDirectContact: Bool {
+        websiteURL != nil || phoneNumber?.nonEmpty != nil
+    }
+}
+
 @MainActor
 final class PlacesService {
     static let shared = PlacesService()
@@ -78,6 +87,11 @@ final class PlacesService {
             enriched.establishmentType = detectedType
         }
         return enriched
+    }
+
+    func contactDetails(for restaurant: Restaurant) async -> PlaceContactDetails? {
+        guard let placeId = restaurant.googlePlaceId else { return nil }
+        return try? await fetchGoogleContactDetails(placeId: placeId)
     }
 
     private func searchGoogle(
@@ -141,6 +155,37 @@ final class PlacesService {
                     return
                 }
                 continuation.resume(returning: result)
+            }
+        }
+    }
+
+    private func fetchGoogleContactDetails(placeId: String) async throws -> PlaceContactDetails {
+        guard googleEnabled else { throw PlacesServiceError.googleNotConfigured }
+
+        let properties = [
+            GMSPlaceProperty.website,
+            GMSPlaceProperty.phoneNumber
+        ].map(\.rawValue)
+        let request = GMSFetchPlaceRequest(
+            placeID: placeId,
+            placeProperties: properties,
+            sessionToken: nil
+        )
+
+        return try await withCheckedThrowingContinuation { continuation in
+            GMSPlacesClient.shared().fetchPlace(with: request) { place, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let place else {
+                    continuation.resume(throwing: PlacesServiceError.missingGooglePlace)
+                    return
+                }
+                continuation.resume(returning: PlaceContactDetails(
+                    websiteURL: place.website,
+                    phoneNumber: place.phoneNumber?.nonEmpty
+                ))
             }
         }
     }
