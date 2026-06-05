@@ -17,13 +17,13 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; persists Google Place IDs, includes journal reads, private storage downloads, and direct picks table access (`savePick`, `fetchTodayPick`) |
 | `Scout/Services/AuthService.swift` | Auth session handling and sign-in flows |
 | `Scout/Services/LocationService.swift` | Location permissions and distance sorting |
-| `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results and enrichment hints |
+| `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results, enrichment hints, and Google website/phone contact details |
 | `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Views/Root/RootView.swift` | Auth gate and custom tab shell |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows |
-| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut |
+| `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut, and reservation/contact actions |
 | `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
 | `Scout/Views/Map/MapView.swift` | Google Maps SDK map wrapper, custom Atlas markers, camera controls, filters, user location, and restaurant peek card |
 | `Scout/Views/Journal/` | Journal index, per-restaurant scrapbook, full composer, fullscreen viewer, and cross-post sheet with real visit/media loading, cached photo/video thumbnails, editable metadata, attachments, swipe paging, video playback, sharing, deletion, and moving accidentally visited places back to the wishlist |
@@ -209,7 +209,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; add flow uses Google Places search and persists Place IDs when configured |
-| 2 | `RestaurantDetailView` | — | Implemented (Phase 2) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, reservation deep links (OpenTable/Resy) |
+| 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, OpenTable/Resy search links, and Google website/phone actions when available |
 | 3 | `PickerView` + `MatchView` | Pick | Implemented (Phase 2) | Swipe-based pick: `PickSession` draws a deterministic deck of 3 restaurants (seeded by circleId + calendar date + time-of-day so all circle members see the same set); time-of-day filtering via `establishmentType` (morning/lunch/dinner windows); SF-Symbol heart badge on yes button; simulated partner progress; on mutual match `MatchView` animates in; post-match: Pick tab shows matched restaurant persistently with a shuffle rematch button top-trailing; match saved to Supabase `picks` table (one per circle per day) + UserDefaults offline cache; `MatchView` has `onConfirm`/`onPickAgain` callbacks |
 | 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, user location, and filter wiring |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
@@ -259,7 +259,7 @@ Phase 1 verified behavior:
 > Make the app genuinely useful day-to-day
 
 - [x] PlacesService (Google Places SDK Text Search New, persisted Place IDs, transient location enrichment, cuisine/type hints, and Apple local-search fallback)
-- [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited, delete; no photos/hours/Places enrichment yet)
+- [x] RestaurantDetailView — partial (hero placeholder, info, edit, mark visited, delete, reservation/contact actions; no photos/hours enrichment yet)
 - [x] MapView (Google Maps SDK pins — per-type colors, glass header, peek card, user location, filter wiring)
 - [x] Visited tracking + notes + rating (`markVisitedWithRecord` in AppState; writes Visit row + updates restaurant rating)
 - [x] MarkVisitedSheet (star rating, photos, visit note, Save/Skip; auto-shown after "Mark as visited")
@@ -271,7 +271,7 @@ Phase 1 verified behavior:
 - [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)
 - [x] PickerView + MatchView (local session, simulated partner; match result persisted to Supabase `picks` table + UserDefaults cache; real-time partner sync deferred to future phase)
 - [x] MediaService (cached photo/video thumbnails, external-share file preparation, and direct camera photo capture)
-- [x] Reservation deep links (OpenTable/Resy)
+- [x] Reservation deep links (OpenTable/Resy search links plus Google website/phone actions when available)
 
 ### Phase 3 — Polish & Platform
 > Native iOS integrations and social import

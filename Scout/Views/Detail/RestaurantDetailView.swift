@@ -11,6 +11,8 @@ struct RestaurantDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var showReservationOptions = false
     @State private var isDeleting = false
+    @State private var contactDetails: PlaceContactDetails?
+    @State private var contactDetailsTask: Task<Void, Never>?
 
     @Environment(\.openURL) private var openURL
 
@@ -90,10 +92,33 @@ struct RestaurantDetailView: View {
             Button("Resy") {
                 if let r = restaurant { openReservation(.resy, for: r) }
             }
+            if let websiteURL = contactDetails?.websiteURL {
+                Button("Website") {
+                    openURL(websiteURL)
+                }
+            }
+            if let phoneNumber = contactDetails?.phoneNumber,
+               let phoneURL = phoneURL(for: phoneNumber) {
+                Button("Call \(phoneNumber)") {
+                    openURL(phoneURL)
+                }
+            }
         } message: {
             if let r = restaurant {
-                Text("Search for \(r.name) on your preferred reservation platform.")
+                if contactDetails?.hasDirectContact == true {
+                    Text("Search reservation platforms or use the restaurant's Google Places contact info.")
+                } else if contactDetailsTask != nil {
+                    Text("Searching for \(r.name)'s website and phone number.")
+                } else {
+                    Text("Search for \(r.name) on your preferred reservation platform.")
+                }
             }
+        }
+        .task(id: restaurant?.googlePlaceId) {
+            loadContactDetails()
+        }
+        .onDisappear {
+            contactDetailsTask?.cancel()
         }
     }
 
@@ -383,10 +408,36 @@ struct RestaurantDetailView: View {
         case .resy:
             components.host = "resy.com"
             components.path = "/"
+            components.queryItems = [
+                URLQueryItem(name: "query", value: restaurant.name)
+            ]
         }
         if let url = components.url {
             openURL(url)
         }
+    }
+
+    private func loadContactDetails() {
+        contactDetailsTask?.cancel()
+        contactDetails = nil
+        guard let restaurant, restaurant.googlePlaceId != nil else { return }
+
+        contactDetailsTask = Task {
+            let details = await PlacesService.shared.contactDetails(for: restaurant)
+            guard !Task.isCancelled else { return }
+            contactDetails = details
+            contactDetailsTask = nil
+        }
+    }
+
+    private func phoneURL(for phoneNumber: String) -> URL? {
+        let allowed = CharacterSet(charactersIn: "+0123456789")
+        let cleaned = phoneNumber.unicodeScalars
+            .filter { allowed.contains($0) }
+            .map(String.init)
+            .joined()
+        guard !cleaned.isEmpty else { return nil }
+        return URL(string: "tel://\(cleaned)")
     }
 }
 
