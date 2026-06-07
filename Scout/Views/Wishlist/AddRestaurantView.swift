@@ -28,12 +28,30 @@ struct AddRestaurantView: View {
     private let popularCuisines = [
         "American", "Italian", "Mexican", "Japanese", "Chinese",
         "Thai", "Indian", "Mediterranean", "French", "Korean",
-        "Vietnamese", "Greek"
+        "Vietnamese", "Greek", "Seafood", "Steakhouse", "BBQ",
+        "Spanish", "Middle Eastern"
     ]
 
     private let vibes = ["Date night", "Casual", "Brunch", "Group", "Solo",
                          "Patio", "Late night", "Special occasion",
                          "Quick bite", "Lively", "Quiet", "Tasting menu"]
+
+    private var orderedCuisines: [String] {
+        guard !cuisine.isEmpty, let idx = popularCuisines.firstIndex(of: cuisine) else {
+            return popularCuisines
+        }
+        var ordered = popularCuisines
+        ordered.remove(at: idx)
+        ordered.insert(cuisine, at: 0)
+        return ordered
+    }
+
+    private var orderedVibes: [String] {
+        guard !selectedVibeTags.isEmpty else { return vibes }
+        let selected = vibes.filter { selectedVibeTags.contains($0) }
+        let rest = vibes.filter { !selectedVibeTags.contains($0) }
+        return selected + rest
+    }
 
     private var effectiveCuisine: String? {
         if establishmentType != .restaurant { return nil }
@@ -89,11 +107,11 @@ struct AddRestaurantView: View {
                     // Cuisine pills — only shown when type is Restaurant
                     if establishmentType == .restaurant {
                         Divider().background(Atlas.rule)
-                        FormField(label: "CUISINE (OPTIONAL)") {
+                        FormField(label: "CUISINE") {
                             VStack(alignment: .leading, spacing: 10) {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 6) {
-                                        ForEach(popularCuisines, id: \.self) { c in
+                                        ForEach(orderedCuisines, id: \.self) { c in
                                             FilterChip(label: c, isActive: !showCuisineOtherField && cuisine == c) {
                                                 withAnimation(.easeInOut(duration: 0.15)) {
                                                     if cuisine == c {
@@ -148,7 +166,7 @@ struct AddRestaurantView: View {
                     FormField(label: "VIBE") {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
-                                ForEach(vibes, id: \.self) { vibe in
+                                ForEach(orderedVibes, id: \.self) { vibe in
                                     FilterChip(label: vibe, isActive: selectedVibeTags.contains(vibe)) {
                                         if selectedVibeTags.contains(vibe) {
                                             selectedVibeTags.remove(vibe)
@@ -259,14 +277,6 @@ struct AddRestaurantView: View {
                 }
             }
 
-            if suggestions.contains(where: { $0.provider == .google }) {
-                Text("POWERED BY GOOGLE")
-                    .font(Atlas.Font.sans(9.5, weight: .medium))
-                    .foregroundColor(Atlas.ink3)
-                    .kerning(1.2)
-                    .padding(.horizontal, Atlas.screenHPad)
-                    .padding(.vertical, 8)
-            }
         }
         .background(Atlas.paper2)
     }
