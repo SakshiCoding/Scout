@@ -14,6 +14,7 @@ struct ImportReviewView: View {
     @State private var suggestions: [PlaceSearchResult] = []
     @State private var selectedPlace: PlaceSearchResult?
     @State private var isSearching = false
+    @State private var hasSearched = false
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -33,8 +34,10 @@ struct ImportReviewView: View {
 
     private var importedName: String {
         selectedPlace?.name
+            ?? query.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
             ?? pendingImport.name
-            ?? query.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? pendingImport.sourceTitle
+            ?? "Imported place"
     }
 
     var body: some View {
@@ -88,7 +91,9 @@ struct ImportReviewView: View {
             Task { await searchPlaces() }
         }
         .onChange(of: query) { _, _ in
-            selectedPlace = nil
+            if selectedPlace?.name != query {
+                selectedPlace = nil
+            }
         }
     }
 
@@ -215,6 +220,11 @@ struct ImportReviewView: View {
                 }
                 .background(Atlas.paper2)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else if hasSearched {
+                Text("No exact match found. Scout will save the name you entered.")
+                    .font(Atlas.Font.sans(12.5))
+                    .foregroundColor(Atlas.ink2)
+                    .padding(.horizontal, 4)
             }
         }
     }
@@ -245,8 +255,8 @@ struct ImportReviewView: View {
 
     private func placeRow(_ place: PlaceSearchResult) -> some View {
         Button {
-            selectedPlace = place
             query = place.name
+            selectedPlace = place
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: selectedPlace?.id == place.id ? "checkmark.circle.fill" : "mappin")
@@ -282,6 +292,7 @@ struct ImportReviewView: View {
     private var sourceIcon: String {
         switch pendingImport.sourceApp {
         case .appleMaps: return "map"
+        case .googleMaps: return "mappin.and.ellipse"
         case .safari:    return "safari"
         case .other:     return "square.and.arrow.down"
         }
@@ -293,6 +304,7 @@ struct ImportReviewView: View {
         isSearching = true
         defer { isSearching = false }
         suggestions = await PlacesService.shared.search(query: trimmed, near: pendingImport.coordinate ?? appState.location.userLocation)
+        hasSearched = true
         if selectedPlace == nil {
             selectedPlace = suggestions.first
         }
@@ -343,6 +355,7 @@ private extension SharedRestaurantImport.SourceApp {
     var displayName: String {
         switch self {
         case .appleMaps: return "Apple Maps"
+        case .googleMaps: return "Google Maps"
         case .safari:    return "Safari"
         case .other:     return "Shared link"
         }

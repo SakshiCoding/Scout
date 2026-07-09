@@ -4,6 +4,7 @@ import Foundation
 struct SharedRestaurantImport: Codable, Identifiable, Equatable {
     enum SourceApp: String, Codable {
         case appleMaps
+        case googleMaps
         case safari
         case other
     }
@@ -49,7 +50,7 @@ struct SharedRestaurantImport: Codable, Identifiable, Equatable {
     }
 
     var searchQuery: String {
-        [name, address, sourceTitle, sourceText]
+        [name, address, sourceTitle, sourceText?.firstCandidateLine]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty }
             .first ?? sourceURL?.absoluteString ?? ""
     }
@@ -81,5 +82,11 @@ enum SharedImportStore {
 private extension String {
     var nonEmpty: String? {
         isEmpty ? nil : self
+    }
+
+    var firstCandidateLine: String? {
+        components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty && !$0.lowercased().hasPrefix("http") }
     }
 }

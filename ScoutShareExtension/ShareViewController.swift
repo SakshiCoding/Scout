@@ -1,3 +1,4 @@
+import MapKit
 import UIKit
 import UniformTypeIdentifiers
 
@@ -59,7 +60,7 @@ final class ShareViewController: UIViewController {
 
     private func captureSharedContent() async {
         let captured = await SharedContentReader(extensionContext: extensionContext).read()
-        let importPayload = SharedImportParser.payload(from: captured)
+        let importPayload = await SharedImportParser.payload(from: captured)
 
         do {
             try SharedImportStore.save(importPayload)
@@ -87,9 +88,20 @@ private struct SharedContent {
     var url: URL?
     var text: String?
     var title: String?
+    var mapItem: SharedMapItem?
+}
+
+private struct SharedMapItem {
+    var name: String?
+    var address: String?
+    var latitude: Double?
+    var longitude: Double?
+    var url: URL?
 }
 
 private struct SharedContentReader {
+    private let mapItemTypeIdentifier = "com.apple.mapkit.map-item"
+
     let extensionContext: NSExtensionContext?
 
     func read() async -> SharedContent {
@@ -109,11 +121,20 @@ private struct SharedContentReader {
             if content.text == nil, provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                 content.text = await loadText(from: provider)
             }
-            if content.url != nil && content.text != nil { break }
+            if content.mapItem == nil, provider.hasItemConformingToTypeIdentifier(mapItemTypeIdentifier) {
+                content.mapItem = await loadMapItem(from: provider)
+            }
+            if content.url != nil && content.text != nil && content.mapItem != nil { break }
         }
 
         if content.url == nil, let textURL = content.text?.firstURL {
             content.url = textURL
+        }
+        if content.url == nil, let mapURL = content.mapItem?.url {
+            content.url = mapURL
+        }
+        if content.title == nil, let mapName = content.mapItem?.name {
+            content.title = mapName
         }
         return content
     }
@@ -150,16 +171,67 @@ private struct SharedContentReader {
             }
         }
     }
+
+    private func loadMapItem(from provider: NSItemProvider) async -> SharedMapItem? {
+        await withCheckedContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: mapItemTypeIdentifier, options: nil) { item, _ in
+                guard let mapItem = item as? MKMapItem else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: SharedMapItem(mapItem: mapItem))
+            }
+        }
+    }
+}
+
+private extension SharedMapItem {
+    init(mapItem: MKMapItem) {
+        let placemark = mapItem.placemark
+        let addressParts = [
+            placemark.subThoroughfare,
+            placemark.thoroughfare,
+            placemark.locality,
+            placemark.administrativeArea
+        ]
+            .compactMap { $0?.nonEmpty }
+            .joined(separator: ", ")
+            .nonEmpty
+
+        self.init(
+            name: mapItem.name?.nonEmpty,
+            address: addressParts,
+            latitude: placemark.coordinate.latitude,
+            longitude: placemark.coordinate.longitude,
+            url: mapItem.url
+        )
+    }
 }
 
 private enum SharedImportParser {
-    nonisolated static func payload(from content: SharedContent) -> SharedRestaurantImport {
-        let sourceApp = sourceApp(for: content.url)
-        let maps = parseAppleMaps(content.url)
-        let cleanedTitle = content.title?.cleanSharedLine
+    nonisolated static func payload(from content: SharedContent) async -> SharedRestaurantImport {
+        let resolvedURL = await resolveGoogleMapsRedirectIfNeeded(content.url)
+        let parsingURL = resolvedURL ?? content.url
+        let sourceApp: SharedRestaurantImport.SourceApp = content.mapItem == nil
+            ? sourceApp(for: parsingURL ?? content.url)
+            : .appleMaps
+        let appleMaps = parseAppleMaps(parsingURL)
+        let googleMaps = parseGoogleMaps(parsingURL)
+        let mapItem = content.mapItem.map {
+            (name: $0.name, address: $0.address, latitude: $0.latitude, longitude: $0.longitude)
+        } ?? (name: nil, address: nil, latitude: nil, longitude: nil)
+        let maps: (name: String?, address: String?, latitude: Double?, longitude: Double?)
+        if mapItem.name != nil || mapItem.address != nil || mapItem.latitude != nil {
+            maps = mapItem
+        } else if appleMaps.name != nil || appleMaps.address != nil || appleMaps.latitude != nil {
+            maps = appleMaps
+        } else {
+            maps = googleMaps
+        }
+        let cleanedTitle = content.title?.shareCandidateLine
         let textLines = content.text?.linesWithoutURLs ?? []
-        let inferredName = maps.name ?? cleanedTitle ?? textLines.first?.cleanSharedLine
-        let inferredAddress = maps.address ?? textLines.dropFirst().first?.cleanSharedLine
+        let inferredName = maps.name ?? cleanedTitle ?? textLines.first?.shareCandidateLine
+        let inferredAddress = maps.address ?? textLines.dropFirst().first?.shareCandidateLine
 
         return SharedRestaurantImport(
             sourceURL: content.url,
@@ -173,9 +245,41 @@ private enum SharedImportParser {
         )
     }
 
+    nonisolated private static func resolveGoogleMapsRedirectIfNeeded(_ url: URL?) async -> URL? {
+        guard let url, isGoogleMapsURL(url), url.host()?.lowercased().contains("goo.gl") == true else {
+            return nil
+        }
+
+        if let resolved = await resolvedURL(for: url, method: "HEAD") {
+            return resolved
+        }
+        return await resolvedURL(for: url, method: "GET")
+    }
+
+    nonisolated private static func resolvedURL(for url: URL, method: String) async -> URL? {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 3
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 3
+        configuration.timeoutIntervalForResource = 3
+        configuration.waitsForConnectivity = false
+        let session = URLSession(configuration: configuration)
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            return response.url == url ? nil : response.url
+        } catch {
+            return nil
+        }
+    }
+
     nonisolated private static func sourceApp(for url: URL?) -> SharedRestaurantImport.SourceApp {
         guard let host = url?.host()?.lowercased() else { return .other }
         if host.contains("maps.apple.com") { return .appleMaps }
+        if isGoogleMapsURL(url) { return .googleMaps }
         return .safari
     }
 
@@ -186,13 +290,65 @@ private enum SharedImportParser {
             return (nil, nil, nil, nil)
         }
 
-        let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
-            item.value.map { (item.name, $0) }
-        })
-        let name = items["q"]?.removingPercentEncoding?.cleanSharedLine
-        let address = items["address"]?.removingPercentEncoding?.cleanSharedLine
+        let items = (components.queryItems ?? []).reduce(into: [String: String]()) { result, item in
+            guard result[item.name] == nil, let value = item.value else { return }
+            result[item.name] = value
+        }
+        let name = items["q"]?.shareCandidateLine
+        let address = items["address"]?.shareCandidateLine
         let coordinate = items["ll"].flatMap(parseCoordinate) ?? items["sll"].flatMap(parseCoordinate)
         return (name, address, coordinate?.latitude, coordinate?.longitude)
+    }
+
+    nonisolated private static func parseGoogleMaps(_ url: URL?) -> (name: String?, address: String?, latitude: Double?, longitude: Double?) {
+        guard let url, isGoogleMapsURL(url) else {
+            return (nil, nil, nil, nil)
+        }
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let items = (components?.queryItems ?? []).reduce(into: [String: String]()) { result, item in
+            guard result[item.name] == nil, let value = item.value else { return }
+            result[item.name] = value
+        }
+        let queryName = items["q"] ?? items["query"] ?? items["destination"] ?? items["daddr"]
+        let pathName = googleMapsPlaceName(from: url)
+        let coordinate = googleMapsCoordinate(from: url)
+
+        return (
+            queryName?.googleMapsCandidateLine ?? pathName,
+            nil,
+            coordinate?.latitude,
+            coordinate?.longitude
+        )
+    }
+
+    nonisolated private static func isGoogleMapsURL(_ url: URL?) -> Bool {
+        guard let url, let host = url.host()?.lowercased() else { return false }
+        if host == "maps.app.goo.gl" || host == "goo.gl" { return true }
+        if host.contains("google.") && url.path.lowercased().contains("/maps") { return true }
+        return false
+    }
+
+    nonisolated private static func googleMapsPlaceName(from url: URL) -> String? {
+        let parts = url.path
+            .split(separator: "/")
+            .map(String.init)
+
+        guard let placeIndex = parts.firstIndex(where: { $0.lowercased() == "place" }),
+              parts.indices.contains(placeIndex + 1) else {
+            return nil
+        }
+
+        return parts[placeIndex + 1].googleMapsCandidateLine
+    }
+
+    nonisolated private static func googleMapsCoordinate(from url: URL) -> (latitude: Double, longitude: Double)? {
+        let path = url.path.removingPercentEncoding ?? url.path
+        guard let atRange = path.range(of: "@") else { return nil }
+        let afterAt = path[atRange.upperBound...]
+        let parts = afterAt.split(separator: ",", maxSplits: 2).compactMap { Double($0) }
+        guard parts.count >= 2 else { return nil }
+        return (parts[0], parts[1])
     }
 
     nonisolated private static func parseCoordinate(_ raw: String) -> (latitude: Double, longitude: Double)? {
@@ -213,18 +369,45 @@ private extension String {
     }
 
     var linesWithoutURLs: [String] {
-        components(separatedBy: .newlines)
-            .map(\.cleanSharedLine)
+        removingURLs
+            .components(separatedBy: .newlines)
+            .map(\.shareCandidateLine)
             .filter { !$0.isEmpty && !$0.lowercased().hasPrefix("http") }
     }
 
-    var cleanSharedLine: String {
-        trimmingCharacters(in: .whitespacesAndNewlines)
+    var shareCandidateLine: String {
+        let trimmed = removingPercentEncoding ?? self
+        return trimmed
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "  ", with: " ")
+    }
+
+    var googleMapsCandidateLine: String {
+        let decoded = (removingPercentEncoding ?? self)
+            .replacingOccurrences(of: "+", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+        return decoded.shareCandidateLine
     }
 
     var firstURL: URL? {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
         let range = NSRange(startIndex..<endIndex, in: self)
         return detector.firstMatch(in: self, range: range)?.url
+    }
+
+    private var removingURLs: String {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return self
+        }
+        let range = NSRange(startIndex..<endIndex, in: self)
+        return detector
+            .matches(in: self, range: range)
+            .reversed()
+            .reduce(self) { text, match in
+                guard let range = Range(match.range, in: text) else { return text }
+                var edited = text
+                edited.removeSubrange(range)
+                return edited
+            }
     }
 }
