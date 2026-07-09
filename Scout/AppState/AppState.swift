@@ -8,6 +8,8 @@ final class AppState {
     var currentUser: User?
     var isAuthenticated = false
     var isLoadingAuth   = true
+    var isPasswordRecovery = false
+    var passwordRecoveryError: String?
 
     // MARK: - Circles
     var circles: [ScoutCircle] = []
@@ -31,6 +33,9 @@ final class AppState {
 
     // MARK: - Pick UI state (persisted across launches)
     var activePickMatch: Restaurant?
+
+    // MARK: - Shared import flow
+    var pendingSharedImport: SharedRestaurantImport?
 
     private static let matchRestaurantKey = "scout.pick.matchRestaurantId"
     private static let matchCircleKey     = "scout.pick.matchCircleId"
@@ -240,6 +245,59 @@ final class AppState {
         let enriched = await places.enrichGoogleRestaurant(saved) ?? saved
         activeTab = .wantToTry
         restaurants.insert(enriched, at: 0)
+    }
+
+    func addImportedRestaurant(_ restaurant: Restaurant) async throws {
+        let saved = try await supabase.addRestaurant(restaurant)
+        let enriched = await places.enrichGoogleRestaurant(saved) ?? saved
+        if activeCircle?.id == restaurant.circleId {
+            activeTab = .wantToTry
+            restaurants.insert(enriched, at: 0)
+        }
+        if let idx = circles.firstIndex(where: { $0.id == restaurant.circleId }) {
+            circles[idx].restaurantCount += 1
+        }
+    }
+
+    func handleOpenURL(_ url: URL) {
+        guard url.scheme == "scout" else { return }
+        switch url.host {
+        case "import-pending":
+            loadPendingSharedImport()
+        case "password-reset":
+            Task {
+                do {
+                    try await auth.handlePasswordRecoveryURL(url)
+                    currentUser = auth.currentUser
+                    isAuthenticated = true
+                    passwordRecoveryError = nil
+                    isPasswordRecovery = true
+                } catch {
+                    passwordRecoveryError = "This reset link is invalid or expired. Request a new one."
+                }
+            }
+        default:
+            break
+        }
+    }
+
+    func finishPasswordRecovery() async {
+        isPasswordRecovery = false
+        currentUser = auth.currentUser
+        isAuthenticated = auth.isAuthenticated
+        if isAuthenticated {
+            await loadCircles()
+        }
+    }
+
+    func loadPendingSharedImport() {
+        guard isAuthenticated else { return }
+        pendingSharedImport = SharedImportStore.load()
+    }
+
+    func clearPendingSharedImport() {
+        SharedImportStore.clear()
+        pendingSharedImport = nil
     }
 
     func bulkImport(names: [String]) async throws {
@@ -489,8 +547,8 @@ final class AppState {
             isLoadingAuth   = false
             if isAuthenticated {
                 await loadCircles()
-                location.requestWhenInUse()
                 location.startUpdating()
+                loadPendingSharedImport()
             }
         }
     }

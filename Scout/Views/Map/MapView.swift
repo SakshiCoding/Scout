@@ -86,10 +86,10 @@ struct MapView: View {
         case .denied, .restricted:
             if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
         case .notDetermined:
-            appState.location.requestWhenInUse()
+            appState.location.requestCurrentLocation()
         default:
             guard let loc = appState.location.userLocation else {
-                appState.location.startUpdating()
+                appState.location.requestCurrentLocation()
                 return
             }
             cameraRequest = GoogleMapCameraRequest(center: loc.coordinate, zoom: max(mapZoom, 13))

@@ -24,8 +24,16 @@ final class LocationService: NSObject, ObservableObject {
         }
     }
 
-    func requestWhenInUse() {
-        manager.requestWhenInUseAuthorization()
+    func requestCurrentLocation() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.startUpdatingLocation()
+            manager.requestLocation()
+        default:
+            authorizationStatus = manager.authorizationStatus
+        }
     }
 
     func startUpdating() {
@@ -87,6 +95,7 @@ extension LocationService: CLLocationManagerDelegate {
             if manager.authorizationStatus == .authorizedWhenInUse ||
                manager.authorizationStatus == .authorizedAlways {
                 manager.startUpdatingLocation()
+                manager.requestLocation()
             }
         }
     }

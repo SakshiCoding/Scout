@@ -16,6 +16,45 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: appState.isAuthenticated)
         .animation(.easeInOut(duration: 0.2), value: appState.isLoadingAuth)
+        .onAppear {
+            appState.loadPendingSharedImport()
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { appState.isAuthenticated && appState.pendingSharedImport != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        appState.clearPendingSharedImport()
+                    }
+                }
+            )
+        ) {
+            if let pendingImport = appState.pendingSharedImport {
+                ImportReviewView(pendingImport: pendingImport)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(Atlas.sheetTopRadius)
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { appState.isPasswordRecovery },
+            set: { appState.isPasswordRecovery = $0 }
+        )) {
+            ResetPasswordView()
+                .interactiveDismissDisabled()
+        }
+        .alert("Password reset failed", isPresented: Binding(
+            get: { appState.passwordRecoveryError != nil },
+            set: { isPresented in
+                if !isPresented { appState.passwordRecoveryError = nil }
+            }
+        )) {
+            Button("OK", role: .cancel) {
+                appState.passwordRecoveryError = nil
+            }
+        } message: {
+            Text(appState.passwordRecoveryError ?? "Request a new reset link and try again.")
+        }
     }
 
     // MARK: - Main tabbed content

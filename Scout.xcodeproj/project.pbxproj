@@ -13,9 +13,35 @@
 		0C1788F12FB6CBAA005C3190 /* DMSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F02FB6CBAA005C3190 /* DMSans-Regular.ttf */; };
 		0C1788F32FB6CBD1005C3190 /* DMSans-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F22FB6CBD1005C3190 /* DMSans-SemiBold.ttf */; };
 		0C1788F52FB6CBF6005C3190 /* DMSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F42FB6CBF6005C3190 /* DMSans-Medium.ttf */; };
+		1CA8931D2FE9B15800902145 /* ScoutShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 1CA893132FE9B15800902145 /* ScoutShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A10000012FE0000000000001 /* GooglePlaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000022FE0000000000002 /* GooglePlaces */; };
 		A10000042FE0000000000004 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = A10000052FE0000000000005 /* GoogleMaps */; };
+		B30000052FE3000000000005 /* Scout/Models/SharedRestaurantImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062FE3000000000006 /* Scout/Models/SharedRestaurantImport.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1CA8931B2FE9B15800902145 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1C8ED52D2FB3B5890059C826 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1CA893122FE9B15800902145;
+			remoteInfo = ScoutShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B30000092FE3000000000009 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1CA8931D2FE9B15800902145 /* ScoutShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0C1788EB2FB6CA04005C3190 /* DMSerifDisplay-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMSerifDisplay-Italic.ttf"; sourceTree = "<group>"; };
@@ -24,6 +50,8 @@
 		0C1788F22FB6CBD1005C3190 /* DMSans-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMSans-SemiBold.ttf"; sourceTree = "<group>"; };
 		0C1788F42FB6CBF6005C3190 /* DMSans-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMSans-Medium.ttf"; sourceTree = "<group>"; };
 		1C8ED5352FB3B5890059C826 /* Scout.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Scout.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1CA893132FE9B15800902145 /* ScoutShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ScoutShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B30000062FE3000000000006 /* Scout/Models/SharedRestaurantImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scout/Models/SharedRestaurantImport.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -51,6 +79,13 @@
 			);
 			target = 1C8ED5342FB3B5890059C826 /* Scout */;
 		};
+		1CA893212FE9B15800902145 /* Exceptions for "ScoutShareExtension" folder in "ScoutShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1CA893122FE9B15800902145 /* ScoutShareExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -60,6 +95,14 @@
 				0C1788532FB52E39005C3190 /* Exceptions for "Scout" folder in "Scout" target */,
 			);
 			path = Scout;
+			sourceTree = "<group>";
+		};
+		1CA893142FE9B15800902145 /* ScoutShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1CA893212FE9B15800902145 /* Exceptions for "ScoutShareExtension" folder in "ScoutShareExtension" target */,
+			);
+			path = ScoutShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,19 +118,36 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1CA893102FE9B15800902145 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1C57F22A2FDB4E24001AEE35 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				B30000062FE3000000000006 /* Scout/Models/SharedRestaurantImport.swift */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		1C8ED52C2FB3B5890059C826 = {
 			isa = PBXGroup;
 			children = (
 				1C8ED5372FB3B5890059C826 /* Scout */,
+				1CA893142FE9B15800902145 /* ScoutShareExtension */,
 				1C8ED5362FB3B5890059C826 /* Products */,
 				0C1788EB2FB6CA04005C3190 /* DMSerifDisplay-Italic.ttf */,
 				0C1788EC2FB6CA04005C3190 /* DMSerifDisplay-Regular.ttf */,
 				0C1788F02FB6CBAA005C3190 /* DMSans-Regular.ttf */,
 				0C1788F22FB6CBD1005C3190 /* DMSans-SemiBold.ttf */,
 				0C1788F42FB6CBF6005C3190 /* DMSans-Medium.ttf */,
+				1C57F22A2FDB4E24001AEE35 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -95,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				1C8ED5352FB3B5890059C826 /* Scout.app */,
+				1CA893132FE9B15800902145 /* ScoutShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -109,10 +170,12 @@
 				1C8ED5312FB3B5890059C826 /* Sources */,
 				1C8ED5322FB3B5890059C826 /* Frameworks */,
 				1C8ED5332FB3B5890059C826 /* Resources */,
+				B30000092FE3000000000009 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				1CA8931C2FE9B15800902145 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1C8ED5372FB3B5890059C826 /* Scout */,
@@ -127,6 +190,28 @@
 			productReference = 1C8ED5352FB3B5890059C826 /* Scout.app */;
 			productType = "com.apple.product-type.application";
 		};
+		1CA893122FE9B15800902145 /* ScoutShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1CA8931E2FE9B15800902145 /* Build configuration list for PBXNativeTarget "ScoutShareExtension" */;
+			buildPhases = (
+				1CA8930F2FE9B15800902145 /* Sources */,
+				1CA893102FE9B15800902145 /* Frameworks */,
+				1CA893112FE9B15800902145 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1CA893142FE9B15800902145 /* ScoutShareExtension */,
+			);
+			name = ScoutShareExtension;
+			packageProductDependencies = (
+			);
+			productName = ScoutShareExtension;
+			productReference = 1CA893132FE9B15800902145 /* ScoutShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -138,6 +223,9 @@
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					1C8ED5342FB3B5890059C826 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					1CA893122FE9B15800902145 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -162,6 +250,7 @@
 			projectRoot = "";
 			targets = (
 				1C8ED5342FB3B5890059C826 /* Scout */,
+				1CA893122FE9B15800902145 /* ScoutShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -179,6 +268,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1CA893112FE9B15800902145 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -189,7 +285,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1CA8930F2FE9B15800902145 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B30000052FE3000000000005 /* Scout/Models/SharedRestaurantImport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1CA8931C2FE9B15800902145 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1CA893122FE9B15800902145 /* ScoutShareExtension */;
+			targetProxy = 1CA8931B2FE9B15800902145 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1C8ED53E2FB3B58A0059C826 /* Debug */ = {
@@ -316,6 +428,7 @@
 				CODE_SIGN_ENTITLEMENTS = Scout/Scout.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 345D62AZC4;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -362,6 +475,7 @@
 				CODE_SIGN_ENTITLEMENTS = Scout/Scout.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 345D62AZC4;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -398,6 +512,71 @@
 			};
 			name = Release;
 		};
+		1CA8931F2FE9B15800902145 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ScoutShareExtension/ScoutShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 345D62AZC4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScoutShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Scout;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sakshisangani.Scout.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1CA893202FE9B15800902145 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ScoutShareExtension/ScoutShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 345D62AZC4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScoutShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Scout;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sakshisangani.Scout.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -415,6 +594,15 @@
 			buildConfigurations = (
 				1C8ED5412FB3B58A0059C826 /* Debug */,
 				1C8ED5422FB3B58A0059C826 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1CA8931E2FE9B15800902145 /* Build configuration list for PBXNativeTarget "ScoutShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CA8931F2FE9B15800902145 /* Debug */,
+				1CA893202FE9B15800902145 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

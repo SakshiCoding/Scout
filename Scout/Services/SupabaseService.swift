@@ -17,7 +17,13 @@ final class SupabaseService {
         guard let url = URL(string: urlString), !urlString.isEmpty else {
             fatalError("SUPABASE_URL is missing or invalid. Check Config.xcconfig and Info.plist.")
         }
-        client = SupabaseClient(supabaseURL: url, supabaseKey: anonKey)
+        client = SupabaseClient(
+            supabaseURL: url,
+            supabaseKey: anonKey,
+            options: SupabaseClientOptions(
+                auth: .init(redirectToURL: URL(string: "scout://password-reset"))
+            )
+        )
     }
 
     // Fallback constants — safe to keep here since the Supabase anon key is a public client key

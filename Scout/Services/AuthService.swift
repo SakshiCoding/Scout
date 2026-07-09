@@ -70,6 +70,24 @@ final class AuthService: ObservableObject {
         isAuthenticated = true
     }
 
+    func sendPasswordReset(email: String) async throws {
+        try await supabase.auth.resetPasswordForEmail(
+            email,
+            redirectTo: URL(string: "scout://password-reset")
+        )
+    }
+
+    func handlePasswordRecoveryURL(_ url: URL) async throws {
+        let session = try await supabase.auth.session(from: url)
+        currentUser = session.user
+        isAuthenticated = true
+    }
+
+    func updatePassword(_ password: String) async throws {
+        currentUser = try await supabase.auth.update(user: UserAttributes(password: password))
+        isAuthenticated = true
+    }
+
     func signOut() async throws {
         try await supabase.auth.signOut()
     }

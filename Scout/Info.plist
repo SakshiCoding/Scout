@@ -8,6 +8,17 @@
 	<string>Scout uses your location to sort restaurants by distance and show them on the map.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Scout uses the camera to add photos to your restaurant journal.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.sakshisangani.Scout</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>scout</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>DMSans-SemiBold.ttf</string>

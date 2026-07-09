@@ -15,6 +15,9 @@ struct ScoutApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                .onOpenURL { url in
+                    appState.handleOpenURL(url)
+                }
         }
     }
 }

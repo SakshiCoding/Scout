@@ -4,6 +4,7 @@ import AuthenticationServices
 struct SignInView: View {
     @Environment(AppState.self) private var appState
     @State private var error: String?
+    @State private var confirmationMessage: String?
     @State private var isLoading = false
     @State private var currentNonce: String = ""
 
@@ -92,6 +93,13 @@ struct SignInView: View {
                                 .multilineTextAlignment(.center)
                                 .padding(.top, 4)
                         }
+                        if let confirmationMessage {
+                            Text(confirmationMessage)
+                                .font(Atlas.Font.sans(13))
+                                .foregroundColor(Atlas.statusOpen)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 4)
+                        }
 
                         // Primary action button
                         Button {
@@ -115,11 +123,21 @@ struct SignInView: View {
                         .disabled(isLoading || email.isEmpty || password.isEmpty)
                         .opacity((email.isEmpty || password.isEmpty) ? 0.5 : 1)
 
+                        if !isSignUp {
+                            Button("Forgot password?") {
+                                requestPasswordReset()
+                            }
+                            .font(Atlas.Font.sans(13, weight: .semibold))
+                            .foregroundColor(Atlas.burnt)
+                            .disabled(isLoading)
+                        }
+
                         // Toggle sign in / sign up
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 isSignUp.toggle()
                                 error = nil
+                                confirmationMessage = nil
                             }
                         } label: {
                             Text(isSignUp ? "Already have an account? **Sign in**" : "No account? **Create one**")
@@ -142,6 +160,7 @@ struct SignInView: View {
         guard !email.isEmpty, !password.isEmpty else { return }
         isLoading = true
         error = nil
+        confirmationMessage = nil
         Task {
             do {
                 if isSignUp {
@@ -152,6 +171,28 @@ struct SignInView: View {
                 await finishAuth()
             } catch {
                 self.error = authErrorMessage(error, isSignUp: isSignUp)
+            }
+            isLoading = false
+        }
+    }
+
+    private func requestPasswordReset() {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEmail.isEmpty else {
+            error = "Enter your email address first."
+            confirmationMessage = nil
+            return
+        }
+
+        isLoading = true
+        error = nil
+        confirmationMessage = nil
+        Task {
+            do {
+                try await appState.auth.sendPasswordReset(email: trimmedEmail)
+                confirmationMessage = "Check your email for a password reset link."
+            } catch {
+                self.error = "Could not send the reset email. Check the address and try again."
             }
             isLoading = false
         }
@@ -197,7 +238,12 @@ struct SignInView: View {
         if msg.contains("invalid login") || msg.contains("invalid credentials") {
             return "Incorrect email or password."
         }
-        return error.localizedDescription
+        if msg.contains("unexpected") {
+            return "We couldn't sign you in. Check your email and password, then try again."
+        }
+        return isSignUp
+            ? "We couldn't create the account. Please try again."
+            : "We couldn't sign you in. Check your email and password, then try again."
     }
 
     private func finishAuth() async {
@@ -205,7 +251,8 @@ struct SignInView: View {
         appState.currentUser     = appState.auth.currentUser
         if appState.isAuthenticated {
             await appState.loadCircles()
-            appState.location.requestWhenInUse()
+            appState.location.startUpdating()
+            appState.loadPendingSharedImport()
         }
     }
 }
