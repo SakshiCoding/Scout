@@ -215,6 +215,7 @@ private enum SharedImportParser {
         let sourceApp: SharedRestaurantImport.SourceApp = content.mapItem == nil
             ? sourceApp(for: parsingURL ?? content.url)
             : .appleMaps
+        let social = parseSocial(content: content, sourceApp: sourceApp)
         let appleMaps = parseAppleMaps(parsingURL)
         let googleMaps = parseGoogleMaps(parsingURL)
         let mapItem = content.mapItem.map {
@@ -230,13 +231,13 @@ private enum SharedImportParser {
         }
         let cleanedTitle = content.title?.shareCandidateLine
         let textLines = content.text?.linesWithoutURLs ?? []
-        let inferredName = maps.name ?? cleanedTitle ?? textLines.first?.shareCandidateLine
+        let inferredName = maps.name ?? social.name ?? cleanedTitle ?? textLines.first?.shareCandidateLine
         let inferredAddress = maps.address ?? textLines.dropFirst().first?.shareCandidateLine
 
         return SharedRestaurantImport(
             sourceURL: content.url,
             sourceText: content.text,
-            sourceTitle: cleanedTitle,
+            sourceTitle: social.title ?? cleanedTitle,
             name: inferredName,
             address: inferredAddress,
             latitude: maps.latitude,
@@ -280,7 +281,34 @@ private enum SharedImportParser {
         guard let host = url?.host()?.lowercased() else { return .other }
         if host.contains("maps.apple.com") { return .appleMaps }
         if isGoogleMapsURL(url) { return .googleMaps }
+        if host.contains("tiktok.com") { return .tiktok }
+        if host.contains("instagram.com") { return .instagram }
+        if isSocialURL(url) { return .social }
         return .safari
+    }
+
+    nonisolated private static func parseSocial(
+        content: SharedContent,
+        sourceApp: SharedRestaurantImport.SourceApp
+    ) -> (name: String?, title: String?) {
+        guard sourceApp == .tiktok || sourceApp == .instagram || sourceApp == .social else {
+            return (nil, nil)
+        }
+
+        let candidateLines = [
+            content.title,
+            content.text
+        ]
+            .compactMap { $0 }
+            .flatMap(\.socialCandidateLines)
+
+        let bestLine = candidateLines.first
+        let restaurantGuess = candidateLines
+            .compactMap(\.restaurantNameGuess)
+            .first
+            ?? bestLine
+
+        return (restaurantGuess, bestLine)
     }
 
     nonisolated private static func parseAppleMaps(_ url: URL?) -> (name: String?, address: String?, latitude: Double?, longitude: Double?) {
@@ -329,6 +357,19 @@ private enum SharedImportParser {
         return false
     }
 
+    nonisolated private static func isSocialURL(_ url: URL?) -> Bool {
+        guard let host = url?.host()?.lowercased() else { return false }
+        return [
+            "x.com",
+            "twitter.com",
+            "threads.net",
+            "facebook.com",
+            "fb.watch",
+            "youtube.com",
+            "youtu.be"
+        ].contains { host == $0 || host.hasSuffix(".\($0)") }
+    }
+
     nonisolated private static func googleMapsPlaceName(from url: URL) -> String? {
         let parts = url.path
             .split(separator: "/")
@@ -371,6 +412,7 @@ private extension String {
     var linesWithoutURLs: [String] {
         removingURLs
             .components(separatedBy: .newlines)
+            .flatMap(\.splitSocialCaption)
             .map(\.shareCandidateLine)
             .filter { !$0.isEmpty && !$0.lowercased().hasPrefix("http") }
     }
@@ -387,6 +429,74 @@ private extension String {
             .replacingOccurrences(of: "+", with: " ")
             .replacingOccurrences(of: "_", with: " ")
         return decoded.shareCandidateLine
+    }
+
+    var socialCandidateLines: [String] {
+        removingURLs
+            .components(separatedBy: .newlines)
+            .flatMap(\.splitSocialCaption)
+            .map(\.socialCandidateLine)
+            .filter(\.isUsefulSocialLine)
+    }
+
+    var socialCandidateLine: String {
+        var line = shareCandidateLine
+        for token in ["#"] {
+            if let range = line.range(of: token) {
+                line = String(line[..<range.lowerBound])
+            }
+        }
+        return line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "  ", with: " ")
+    }
+
+    var restaurantNameGuess: String? {
+        let lowercasedLine = lowercased()
+        let markers = [" at ", " @ ", " from ", " in "]
+        for marker in markers {
+            guard let range = lowercasedLine.range(of: marker, options: .backwards) else { continue }
+            let suffix = String(self[range.upperBound...]).socialNameFragment
+            if suffix.count >= 2 { return suffix }
+        }
+
+        if hasPrefix("@") {
+            let handleName = dropFirst()
+                .split { $0.isWhitespace || [".", ",", ":", "|"].contains(String($0)) }
+                .first
+                .map(String.init)?
+                .replacingOccurrences(of: "_", with: " ")
+            return handleName?.socialNameFragment
+        }
+
+        return isUsefulSocialLine && count <= 80 ? self : nil
+    }
+
+    var socialNameFragment: String {
+        let stopCharacters = CharacterSet(charactersIn: "#@|\u{2022}\n")
+            .union(.newlines)
+        let fragment = components(separatedBy: stopCharacters).first ?? self
+        return fragment
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            .replacingOccurrences(of: "  ", with: " ")
+    }
+
+    var isUsefulSocialLine: Bool {
+        let cleaned = socialCandidateLine
+        let lower = cleaned.lowercased()
+        guard cleaned.count >= 2 else { return false }
+        guard !lower.hasPrefix("http") else { return false }
+        guard !lower.hasPrefix("@") else { return false }
+        guard !lower.contains("tiktok") || cleaned.count > 12 else { return false }
+        guard !lower.contains("instagram") || cleaned.count > 14 else { return false }
+        guard !["watch more", "watch now", "original sound", "reels", "reel"].contains(lower) else { return false }
+        return true
+    }
+
+    var splitSocialCaption: [String] {
+        replacingOccurrences(of: "\u{1F4CD}", with: "\n")
+            .replacingOccurrences(of: "\u{2022}", with: "\n")
+            .components(separatedBy: " - ")
     }
 
     var firstURL: URL? {

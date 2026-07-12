@@ -293,6 +293,9 @@ struct ImportReviewView: View {
         switch pendingImport.sourceApp {
         case .appleMaps: return "map"
         case .googleMaps: return "mappin.and.ellipse"
+        case .tiktok: return "music.note"
+        case .instagram: return "camera"
+        case .social: return "bubble.left.and.text.bubble.right"
         case .safari:    return "safari"
         case .other:     return "square.and.arrow.down"
         }
@@ -356,6 +359,9 @@ private extension SharedRestaurantImport.SourceApp {
         switch self {
         case .appleMaps: return "Apple Maps"
         case .googleMaps: return "Google Maps"
+        case .tiktok: return "TikTok"
+        case .instagram: return "Instagram"
+        case .social: return "Social post"
         case .safari:    return "Safari"
         case .other:     return "Shared link"
         }

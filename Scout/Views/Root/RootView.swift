@@ -66,9 +66,39 @@ struct RootView: View {
 
             CustomTabBar(selected: $selectedTab)
                 .padding(.bottom, Atlas.tabBarBottomOffset)
+
+            #if DEBUG
+            debugImportButton
+                .padding(.trailing, Atlas.screenHPad)
+                .padding(.bottom, Atlas.tabBarBottomOffset + Atlas.tabBarHeight + 12)
+            #endif
         }
         .ignoresSafeArea(edges: .bottom)
     }
+
+    #if DEBUG
+    private var debugImportButton: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button {
+                    appState.loadDebugTikTokImport()
+                } label: {
+                    Label("Test Import", systemImage: "music.note")
+                        .font(Atlas.Font.sans(12, weight: .semibold))
+                        .foregroundColor(Atlas.paper)
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(Atlas.ink, in: Capsule())
+                        .shadow(color: Color.black.opacity(0.16), radius: 12, x: 0, y: 6)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .allowsHitTesting(true)
+    }
+    #endif
 
     @ViewBuilder
     private var tabContent: some View {

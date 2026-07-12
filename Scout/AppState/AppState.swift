@@ -300,6 +300,23 @@ final class AppState {
         pendingSharedImport = nil
     }
 
+    #if DEBUG
+    func loadDebugTikTokImport() {
+        pendingSharedImport = SharedRestaurantImport(
+            sourceURL: URL(string: "https://www.tiktok.com/@scout.test/video/7400000000000000000"),
+            sourceText: """
+            Best handmade pasta date night at Lilia in Williamsburg
+            Save this spot for your next Brooklyn dinner
+            #nycfood #brooklynrestaurants #datenight
+            """,
+            sourceTitle: "TikTok restaurant post",
+            name: "Lilia",
+            address: "Williamsburg, Brooklyn, NY",
+            sourceApp: .tiktok
+        )
+    }
+    #endif
+
     func bulkImport(names: [String]) async throws {
         guard let circleId = activeCircle?.id,
               let userId   = currentUser?.id else { return }

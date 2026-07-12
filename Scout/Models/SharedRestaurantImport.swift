@@ -5,6 +5,9 @@ struct SharedRestaurantImport: Codable, Identifiable, Equatable {
     enum SourceApp: String, Codable {
         case appleMaps
         case googleMaps
+        case tiktok
+        case instagram
+        case social
         case safari
         case other
     }
@@ -85,8 +88,37 @@ private extension String {
     }
 
     var firstCandidateLine: String? {
-        components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        removingURLs
+            .components(separatedBy: .newlines)
+            .map(\.socialCandidateLine)
             .first { !$0.isEmpty && !$0.lowercased().hasPrefix("http") }
+    }
+
+    var socialCandidateLine: String {
+        var line = trimmingCharacters(in: .whitespacesAndNewlines)
+        for token in ["#"] {
+            if let range = line.range(of: token) {
+                line = String(line[..<range.lowerBound])
+            }
+        }
+        return line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "  ", with: " ")
+    }
+
+    private var removingURLs: String {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return self
+        }
+        let range = NSRange(startIndex..<endIndex, in: self)
+        return detector
+            .matches(in: self, range: range)
+            .reversed()
+            .reduce(self) { text, match in
+                guard let range = Range(match.range, in: text) else { return text }
+                var edited = text
+                edited.removeSubrange(range)
+                return edited
+            }
     }
 }
