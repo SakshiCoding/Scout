@@ -17,6 +17,7 @@ struct ImportReviewView: View {
     @State private var hasSearched = false
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var geminiGuess: GeminiRestaurantGuess?
 
     init(pendingImport: SharedRestaurantImport) {
         self.pendingImport = pendingImport
@@ -89,6 +90,7 @@ struct ImportReviewView: View {
         .onAppear {
             selectedCircleId = appState.activeCircle?.id ?? appState.circles.first?.id
             Task { await searchPlaces() }
+            Task { await parseCaptionWithGemini() }
         }
         .onChange(of: query) { _, _ in
             if selectedPlace?.name != query {
@@ -313,6 +315,26 @@ struct ImportReviewView: View {
         }
     }
 
+    private func parseCaptionWithGemini() async {
+        guard [.tiktok, .instagram, .social].contains(pendingImport.sourceApp) else { return }
+        let hasCaptionText = pendingImport.sourceText?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty != nil
+            || pendingImport.sourceTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty != nil
+        guard hasCaptionText else { return }
+
+        guard let guess = await appState.gemini.parseRestaurantMention(
+            caption: pendingImport.sourceText,
+            sourceTitle: pendingImport.sourceTitle,
+            sourceURL: pendingImport.sourceURL,
+            sourceApp: pendingImport.sourceApp
+        ) else { return }
+
+        geminiGuess = guess
+        if selectedPlace == nil, query == pendingImport.searchQuery {
+            query = guess.name
+            Task { await searchPlaces() }
+        }
+    }
+
     private func save() async {
         guard let circle = selectedCircle,
               let userId = appState.currentUser?.id else {
@@ -328,17 +350,22 @@ struct ImportReviewView: View {
             .joined(separator: "\n")
             .nonEmpty
 
+        let cuisine = selectedPlace?.cuisine ?? geminiGuess?.cuisine
+        let establishmentType = selectedPlace?.establishmentType ?? geminiGuess?.establishmentType ?? .restaurant
+        let priceTier = selectedPlace?.priceTier ?? geminiGuess?.priceTier
+        let vibeTags = Array(selectedPlace?.vibeHints ?? Set(geminiGuess?.vibeTags ?? []))
+
         let restaurant = Restaurant(
             circleId: circle.id,
             name: importedName.trimmingCharacters(in: .whitespacesAndNewlines),
-            cuisine: selectedPlace?.cuisine,
-            establishmentType: selectedPlace?.establishmentType ?? .restaurant,
-            priceTier: selectedPlace?.priceTier,
+            cuisine: cuisine,
+            establishmentType: establishmentType,
+            priceTier: priceTier,
             address: selectedPlace?.address ?? pendingImport.address,
             latitude: selectedPlace?.latitude ?? pendingImport.latitude,
             longitude: selectedPlace?.longitude ?? pendingImport.longitude,
             notes: noteText,
-            vibeTags: Array(selectedPlace?.vibeHints ?? Set<String>()),
+            vibeTags: vibeTags,
             googlePlaceId: selectedPlace?.googlePlaceId,
             addedBy: userId
         )

@@ -105,6 +105,7 @@ final class AppState {
     let auth      = AuthService()
     let location  = LocationService()
     let places    = PlacesService.shared
+    let gemini    = GeminiService.shared
     let mediaService = MediaService()
 
     init() {

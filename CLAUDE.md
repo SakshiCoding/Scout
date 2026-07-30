@@ -18,6 +18,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Services/AuthService.swift` | Auth session handling, email/Apple sign-in, password-reset email requests, recovery callback sessions, and password updates |
 | `Scout/Services/LocationService.swift` | Location permissions, tap-triggered current-location requests, immediate post-authorization location refresh, and distance sorting |
 | `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results, enrichment hints (expanded cuisine mapping: 25 types including Seafood, Steakhouse, BBQ, Spanish, Middle Eastern, Brazilian, Indonesian, Lebanese, Turkish; vibe hints from fine dining, fast food, brunch, sports bar types), and Google website/phone contact details |
+| `Scout/Services/GeminiService.swift` | Google Gemini REST client (`gemini-flash-latest`, structured JSON output via `responseSchema`) that parses a shared social caption/title into a `GeminiRestaurantGuess` (name, cuisine, establishment type, price tier, vibe tags, confidence); degrades silently to `nil` when `GEMINI_API_KEY` is unconfigured, caption text is empty, or the request/decode fails |
 | `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Models/SharedRestaurantImport.swift` | Shared app/extension import payload + App Group storage for pending restaurant/social shares |
@@ -203,6 +204,8 @@ Journal photos and videos use the private `scout-media` Supabase Storage bucket.
 
 Migration `20260604000000_add_google_places_metadata.sql` adds `google_place_id` to restaurants and extends the `add_restaurant` RPC. Scout persists Place IDs for Google-linked restaurants, then refreshes Google address and coordinates into memory for display on the Google map instead of treating cached coordinates as the long-term source of truth. To enable the integration, enable Places API (New) and Maps SDK for iOS in Google Cloud, create an iOS-restricted API key for Scout's bundle identifier, and set `GOOGLE_MAPS_API_KEY` in the ignored `Scout/Config.xcconfig` file. Use `Scout/Config.example.xcconfig` as the template.
 
+`GeminiService` reads `GEMINI_API_KEY` from Info.plist the same way (unconfigured/placeholder key disables the feature, no crash). `ImportReviewView` calls `appState.gemini.parseRestaurantMention` in a fire-and-forget `Task` on `.onAppear`, only when `pendingImport.sourceApp` is `.tiktok`, `.instagram`, or `.social` and there is caption or title text to parse. A successful guess silently improves the initial search query prefill (if the user hasn't already picked a place or edited the query) and fills in `cuisine`/`establishmentType`/`priceTier`/`vibeTags` as a fallback under whatever the selected Google Place already supplied on save. No new UI was added for this — failures and unconfigured keys are invisible to the user.
+
 Confirmed journal visits and uploaded media are merged into `AppState` immediately and preserved while the network refresh reconciles with Supabase. Keep this optimistic merge behavior when changing journal loading so a delayed response cannot make a newly saved entry disappear.
 
 ---
@@ -224,7 +227,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 9 | `JournalViewerView` | — | Implemented | Fullscreen dark photo/video viewer with swipe paging, page dots, caption block, cached thumbnail strip, close/share/overflow controls, deletion, and native video playback |
 | 10 | `MarkVisitedSheet` | — | Implemented | Auto-prompted after "Mark as visited" — rating, photos, and visit note; "Save to journal" creates a Visit record and uploads photos, "Skip for now" marks visited only |
 | 11 | `CrossPostSheet` | — | Implemented | Copy a journal photo/video into another circle's matching restaurant journal or share externally through iOS |
-| 12 | `ImportReviewView` | — | Implemented | Main-app review sheet launched from the Share Extension or debug simulator test hook; confirms Safari/Apple Maps/Google Maps/TikTok/Instagram imports, chooses circle, matches Google/Apple Places results, keeps manual name edits, and saves to wishlist even when no exact match is found |
+| 12 | `ImportReviewView` | — | Implemented | Main-app review sheet launched from the Share Extension or debug simulator test hook; confirms Safari/Apple Maps/Google Maps/TikTok/Instagram imports, chooses circle, matches Google/Apple Places results, keeps manual name edits, and saves to wishlist even when no exact match is found; for TikTok/Instagram/social imports with caption text, silently kicks off `GeminiService.parseRestaurantMention` on appear to improve the search prefill and backfill cuisine/establishment type/price tier/vibe tags on save when Places didn't supply them |
 | 13 | `ResetPasswordView` | — | Implemented | Full-screen password recovery form opened by Supabase email links through `scout://password-reset` |
 
 ### Key layout rules across all screens
@@ -286,8 +289,8 @@ Phase 1 verified behavior:
 - [x] Share Extension (Safari + Apple Maps + Google Maps URL/text capture, Apple Maps MapKit place payloads, Google Maps short-link expansion, safer shared-text/link parsing, App Group handoff, main-app import review, Places matching/manual fallback, and wishlist save)
 - [x] Social share capture foundation (TikTok/Instagram/source detection, first-pass caption cleanup, and import review handoff)
 - [x] Debug-only simulator social import test hook for exercising TikTok-style import review without installing TikTok
-- [ ] TikTok/Gemini structured parser (AI-assisted restaurant/city/cuisine/vibe extraction)
-- [ ] GeminiService (Google Gemini API — caption parsing from TikTok/social)
+- [x] TikTok/Gemini structured parser (restaurant name/cuisine/establishment type/price tier/vibe tags extraction via `GeminiService`, wired into `ImportReviewView`'s auto-parse-on-appear flow)
+- [x] GeminiService (Google Gemini API — caption parsing from TikTok/social)
 - [ ] Gemini cuisine + vibe autofill from restaurant name (when Google Places types are too generic)
 - [ ] ScoutWidget (WidgetKit)
 - [ ] Siri Shortcut
