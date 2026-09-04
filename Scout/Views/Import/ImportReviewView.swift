@@ -13,11 +13,13 @@ struct ImportReviewView: View {
     @State private var note = ""
     @State private var suggestions: [PlaceSearchResult] = []
     @State private var selectedPlace: PlaceSearchResult?
+    @State private var geminiResult: GeminiRestaurantParseResult?
+    @State private var isParsingShare = false
+    @State private var didStartImportPreparation = false
     @State private var isSearching = false
     @State private var hasSearched = false
     @State private var isSaving = false
     @State private var errorMessage: String?
-    @State private var geminiGuess: GeminiRestaurantGuess?
 
     init(pendingImport: SharedRestaurantImport) {
         self.pendingImport = pendingImport
@@ -35,10 +37,31 @@ struct ImportReviewView: View {
 
     private var importedName: String {
         selectedPlace?.name
+            ?? geminiRestaurantNameIfQueryStillMatches
             ?? query.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
             ?? pendingImport.name
             ?? pendingImport.sourceTitle
             ?? "Imported place"
+    }
+
+    private var geminiRestaurantNameIfQueryStillMatches: String? {
+        guard let geminiResult,
+              let restaurantName = geminiResult.restaurantName?.nonEmpty else {
+            return nil
+        }
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generatedQuery = geminiResult.suggestedSearchQuery
+        let isStillGeneratedQuery = trimmedQuery.compare(
+            generatedQuery,
+            options: [.caseInsensitive, .diacriticInsensitive]
+        ) == .orderedSame
+        let isStillRestaurantName = trimmedQuery.compare(
+            restaurantName,
+            options: [.caseInsensitive, .diacriticInsensitive]
+        ) == .orderedSame
+
+        return isStillGeneratedQuery || isStillRestaurantName ? restaurantName : nil
     }
 
     var body: some View {
@@ -48,6 +71,9 @@ struct ImportReviewView: View {
                     header
                     circleSelector
                     sourceCard
+                    if shouldParseWithGemini || geminiResult != nil {
+                        aiSuggestionCard
+                    }
                     searchSection
                     noteField
                     if let errorMessage {
@@ -89,8 +115,9 @@ struct ImportReviewView: View {
         }
         .onAppear {
             selectedCircleId = appState.activeCircle?.id ?? appState.circles.first?.id
-            Task { await searchPlaces() }
-            Task { await parseCaptionWithGemini() }
+            guard !didStartImportPreparation else { return }
+            didStartImportPreparation = true
+            Task { await prepareImport() }
         }
         .onChange(of: query) { _, _ in
             if selectedPlace?.name != query {
@@ -167,6 +194,44 @@ struct ImportReviewView: View {
                             .lineLimit(1)
                     } else if let text = pendingImport.sourceText {
                         Text(text)
+                            .font(Atlas.Font.sans(12))
+                            .foregroundColor(Atlas.ink2)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer()
+            }
+            .padding(14)
+            .background(Atlas.paper2)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private var aiSuggestionCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            label("FROM SHARE")
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: isParsingShare ? "sparkles" : "checkmark.seal")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Atlas.burnt)
+                    .frame(width: 28, height: 28)
+                    .background(Atlas.burnt.opacity(0.10))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 5) {
+                    if isParsingShare {
+                        Text("Reading the share...")
+                            .font(Atlas.Font.serif(17))
+                            .foregroundColor(Atlas.ink)
+                        ProgressView()
+                            .tint(Atlas.burnt)
+                            .scaleEffect(0.82, anchor: .leading)
+                    } else if let geminiResult {
+                        Text(geminiResult.restaurantName ?? "Suggested details")
+                            .font(Atlas.Font.serif(17))
+                            .foregroundColor(Atlas.ink)
+                            .lineLimit(1)
+                        Text(geminiSummary(for: geminiResult))
                             .font(Atlas.Font.sans(12))
                             .foregroundColor(Atlas.ink2)
                             .lineLimit(2)
@@ -303,6 +368,52 @@ struct ImportReviewView: View {
         }
     }
 
+    private var shouldParseWithGemini: Bool {
+        switch pendingImport.sourceApp {
+        case .tiktok, .instagram, .social:
+            return appState.gemini.isConfigured
+        case .appleMaps, .googleMaps, .safari, .other:
+            return false
+        }
+    }
+
+    private func prepareImport() async {
+        if shouldParseWithGemini {
+            await parseSharedText()
+        }
+        await searchPlaces()
+    }
+
+    private func parseSharedText() async {
+        isParsingShare = true
+        defer { isParsingShare = false }
+
+        do {
+            let result = try await appState.gemini.parseRestaurantImport(pendingImport)
+            guard result.hasUsablePlaceHint || result.confidence >= 0.35 else { return }
+            geminiResult = result
+            applyGeminiResult(result)
+        } catch {
+            // Keep the existing manual import path when Gemini is unavailable or unsure.
+        }
+    }
+
+    private func applyGeminiResult(_ result: GeminiRestaurantParseResult) {
+        if result.hasUsablePlaceHint {
+            let suggestedQuery = result.suggestedSearchQuery.nonEmpty ?? result.restaurantName
+            if let suggestedQuery {
+                query = suggestedQuery
+                selectedPlace = nil
+                hasSearched = false
+                suggestions = []
+            }
+        }
+
+        if note.isEmpty, let parsedNote = result.note {
+            note = parsedNote
+        }
+    }
+
     private func searchPlaces() async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return }
@@ -312,26 +423,6 @@ struct ImportReviewView: View {
         hasSearched = true
         if selectedPlace == nil {
             selectedPlace = suggestions.first
-        }
-    }
-
-    private func parseCaptionWithGemini() async {
-        guard [.tiktok, .instagram, .social].contains(pendingImport.sourceApp) else { return }
-        let hasCaptionText = pendingImport.sourceText?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty != nil
-            || pendingImport.sourceTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty != nil
-        guard hasCaptionText else { return }
-
-        guard let guess = await appState.gemini.parseRestaurantMention(
-            caption: pendingImport.sourceText,
-            sourceTitle: pendingImport.sourceTitle,
-            sourceURL: pendingImport.sourceURL,
-            sourceApp: pendingImport.sourceApp
-        ) else { return }
-
-        geminiGuess = guess
-        if selectedPlace == nil, query == pendingImport.searchQuery {
-            query = guess.name
-            Task { await searchPlaces() }
         }
     }
 
@@ -350,22 +441,17 @@ struct ImportReviewView: View {
             .joined(separator: "\n")
             .nonEmpty
 
-        let cuisine = selectedPlace?.cuisine ?? geminiGuess?.cuisine
-        let establishmentType = selectedPlace?.establishmentType ?? geminiGuess?.establishmentType ?? .restaurant
-        let priceTier = selectedPlace?.priceTier ?? geminiGuess?.priceTier
-        let vibeTags = Array(selectedPlace?.vibeHints ?? Set(geminiGuess?.vibeTags ?? []))
-
         let restaurant = Restaurant(
             circleId: circle.id,
             name: importedName.trimmingCharacters(in: .whitespacesAndNewlines),
-            cuisine: cuisine,
-            establishmentType: establishmentType,
-            priceTier: priceTier,
+            cuisine: selectedPlace?.cuisine ?? geminiResult?.cuisine,
+            establishmentType: selectedPlace?.establishmentType ?? geminiResult?.establishmentType ?? .restaurant,
+            priceTier: selectedPlace?.priceTier ?? geminiResult?.priceTier,
             address: selectedPlace?.address ?? pendingImport.address,
             latitude: selectedPlace?.latitude ?? pendingImport.latitude,
             longitude: selectedPlace?.longitude ?? pendingImport.longitude,
             notes: noteText,
-            vibeTags: vibeTags,
+            vibeTags: mergedVibeTags,
             googlePlaceId: selectedPlace?.googlePlaceId,
             addedBy: userId
         )
@@ -378,6 +464,27 @@ struct ImportReviewView: View {
             errorMessage = error.localizedDescription
         }
         isSaving = false
+    }
+
+    private var mergedVibeTags: [String] {
+        var tags: [String] = []
+        for tag in Array(selectedPlace?.vibeHints ?? Set<String>()) + (geminiResult?.vibeTags ?? []) {
+            guard !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { continue }
+            tags.append(tag)
+        }
+        return Array(tags.prefix(5))
+    }
+
+    private func geminiSummary(for result: GeminiRestaurantParseResult) -> String {
+        [
+            result.neighborhood,
+            result.city,
+            result.cuisine,
+            result.priceTier?.rawValue,
+            result.vibeTags.first
+        ]
+        .compactMap { $0?.nonEmpty }
+        .joined(separator: " · ")
     }
 }
 

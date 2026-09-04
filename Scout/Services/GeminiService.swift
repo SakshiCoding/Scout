@@ -1,247 +1,320 @@
 import Foundation
 
-struct GeminiRestaurantGuess: Equatable {
-    let name: String
-    let cuisine: String?
-    let establishmentType: Restaurant.EstablishmentType?
-    let priceTier: Restaurant.PriceTier?
-    let vibeTags: [String]
-    let confidence: String?
+struct GeminiRestaurantParseResult: Codable, Equatable {
+    var restaurantName: String?
+    var city: String?
+    var neighborhood: String?
+    var cuisine: String?
+    var establishmentType: Restaurant.EstablishmentType?
+    var priceTier: Restaurant.PriceTier?
+    var vibeTags: [String]
+    var note: String?
+    var confidence: Double
+
+    var suggestedSearchQuery: String {
+        [restaurantName, neighborhood, city]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty }
+            .joined(separator: " ")
+    }
+
+    var hasUsablePlaceHint: Bool {
+        restaurantName?.trimmingCharacters(in: .whitespacesAndNewlines).count ?? 0 >= 2
+    }
+
+    init(
+        restaurantName: String? = nil,
+        city: String? = nil,
+        neighborhood: String? = nil,
+        cuisine: String? = nil,
+        establishmentType: Restaurant.EstablishmentType? = nil,
+        priceTier: Restaurant.PriceTier? = nil,
+        vibeTags: [String] = [],
+        note: String? = nil,
+        confidence: Double = 0
+    ) {
+        self.restaurantName = restaurantName
+        self.city = city
+        self.neighborhood = neighborhood
+        self.cuisine = cuisine
+        self.establishmentType = establishmentType
+        self.priceTier = priceTier
+        self.vibeTags = vibeTags
+        self.note = note
+        self.confidence = confidence
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case restaurantName = "restaurant_name"
+        case city
+        case neighborhood
+        case cuisine
+        case establishmentType = "establishment_type"
+        case priceTier = "price_tier"
+        case vibeTags = "vibe_tags"
+        case note
+        case confidence
+    }
 }
 
-@MainActor
 final class GeminiService {
     static let shared = GeminiService()
 
     private let apiKey: String?
-    private let isEnabled: Bool
+    private let modelName: String
+    private let session: URLSession
 
-    private init(bundle: Bundle = .main) {
+    init(bundle: Bundle = .main, session: URLSession = .shared) {
         let configuredKey = (bundle.object(forInfoDictionaryKey: "GEMINI_API_KEY") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = configuredKey?.hasPrefix("$(") == true ? nil : configuredKey?.nonEmpty
-        self.apiKey = key
-        self.isEnabled = key != nil
+        self.apiKey = configuredKey?.hasPrefix("$(") == true ? nil : configuredKey?.nonEmpty
+
+        let configuredModel = (bundle.object(forInfoDictionaryKey: "GEMINI_MODEL") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.modelName = configuredModel?.hasPrefix("$(") == true
+            ? "gemini-2.5-flash"
+            : configuredModel?.nonEmpty ?? "gemini-2.5-flash"
+
+        self.session = session
     }
 
-    func parseRestaurantMention(
-        caption: String?,
-        sourceTitle: String?,
-        sourceURL: URL?,
-        sourceApp: SharedRestaurantImport.SourceApp
-    ) async -> GeminiRestaurantGuess? {
-        guard isEnabled, let apiKey = apiKey else { return nil }
-
-        let captionText = (caption ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let titleText = (sourceTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !captionText.isEmpty || !titleText.isEmpty else { return nil }
-
-        let sourceAppName = sourceAppDisplayName(sourceApp)
-        let urlText = sourceURL?.absoluteString ?? ""
-        let userPrompt = buildPrompt(caption: captionText, title: titleText, url: urlText, app: sourceAppName)
-
-        return await fetchGeminiGuess(prompt: userPrompt, apiKey: apiKey)
+    var isConfigured: Bool {
+        apiKey != nil
     }
 
-    private func sourceAppDisplayName(_ app: SharedRestaurantImport.SourceApp) -> String {
-        switch app {
-        case .tiktok:
-            return "TikTok"
-        case .instagram:
-            return "Instagram"
-        case .social, .other:
-            return "Social Media"
-        case .appleMaps, .googleMaps, .safari:
-            return "Shared Link"
+    func parseRestaurantImport(_ pendingImport: SharedRestaurantImport) async throws -> GeminiRestaurantParseResult {
+        let text = promptInput(for: pendingImport)
+        guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3 else {
+            throw GeminiServiceError.emptyInput
         }
+        return try await parseRestaurantText(text, sourceApp: pendingImport.sourceApp)
     }
 
-    private func buildPrompt(caption: String, title: String, url: String, app: String) -> String {
-        var parts: [String] = []
-        if !caption.isEmpty {
-            parts.append("Caption: \(caption)")
-        }
-        if !title.isEmpty {
-            parts.append("Title: \(title)")
-        }
-        if !url.isEmpty {
-            parts.append("URL: \(url)")
-        }
+    func parseRestaurantText(
+        _ text: String,
+        sourceApp: SharedRestaurantImport.SourceApp = .social
+    ) async throws -> GeminiRestaurantParseResult {
+        guard let apiKey else { throw GeminiServiceError.missingAPIKey }
 
-        let content = parts.joined(separator: "\n")
-        return """
-You are given a caption or title from a social media post (app: \(app)). Identify the single most likely specific restaurant, cafe, bar, or food establishment being mentioned or reviewed. If no specific establishment can be confidently identified, return an empty name and confidence "low". Do not invent a business that isn't referenced.
-
-\(content)
-"""
-    }
-
-    private func fetchGeminiGuess(prompt: String, apiKey: String) async -> GeminiRestaurantGuess? {
-        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest/generateContent?key=\(apiKey)"
-        guard let url = URL(string: endpoint) else { return nil }
-
-        let requestBody = GeminiRequest(prompt: prompt)
-        guard let httpBody = try? JSONEncoder().encode(requestBody) else { return nil }
-
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(modelName):generateContent")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = httpBody
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                return nil
-            }
-
-            let geminiResponse = try JSONDecoder().decode(GeminiResponse.self, from: data)
-            guard let candidates = geminiResponse.candidates, !candidates.isEmpty else {
-                return nil
-            }
-
-            guard let textContent = candidates[0].content?.parts?.first?.text else {
-                return nil
-            }
-
-            guard let innerData = textContent.data(using: .utf8) else { return nil }
-            let guess = try JSONDecoder().decode(GeminiInnerGuess.self, from: innerData)
-
-            let name = guess.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !name.isEmpty else { return nil }
-
-            let establishmentType = guess.establishmentType.flatMap { Restaurant.EstablishmentType(rawValue: $0) }
-            let priceTier = guess.priceTier.flatMap { Restaurant.PriceTier(rawValue: $0) }
-
-            return GeminiRestaurantGuess(
-                name: name,
-                cuisine: guess.cuisine,
-                establishmentType: establishmentType,
-                priceTier: priceTier,
-                vibeTags: guess.vibeTags ?? [],
-                confidence: guess.confidence
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        request.httpBody = try JSONEncoder().encode(
+            GenerateContentRequest(
+                contents: [
+                    Content(parts: [
+                        Part(text: restaurantExtractionPrompt(text: text, sourceApp: sourceApp))
+                    ])
+                ],
+                generationConfig: GenerationConfig(
+                    responseMimeType: "application/json",
+                    responseSchema: .restaurantParseResultSchema
+                )
             )
-        } catch {
-            return nil
+        )
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GeminiServiceError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw GeminiServiceError.requestFailed(statusCode: httpResponse.statusCode)
+        }
+
+        let responseBody = try JSONDecoder().decode(GenerateContentResponse.self, from: data)
+        guard let text = responseBody.candidates.first?.content.parts.compactMap(\.text).joined(),
+              let jsonData = text.cleanedJSONString.data(using: .utf8) else {
+            throw GeminiServiceError.missingContent
+        }
+
+        return try JSONDecoder().decode(GeminiRestaurantParseResult.self, from: jsonData).normalized
+    }
+
+    private func promptInput(for pendingImport: SharedRestaurantImport) -> String {
+        [
+            pendingImport.sourceTitle,
+            pendingImport.name,
+            pendingImport.address,
+            pendingImport.sourceText,
+            pendingImport.sourceURL?.absoluteString
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty }
+        .joined(separator: "\n")
+    }
+
+    private func restaurantExtractionPrompt(
+        text: String,
+        sourceApp: SharedRestaurantImport.SourceApp
+    ) -> String {
+        """
+        Extract restaurant wishlist details from this shared \(sourceApp.displayNameForPrompt) content.
+
+        Return only JSON matching the response schema. Use null when a value is not present or would be a guess.
+        Rules:
+        - restaurant_name should be the actual place name, not a creator username, city guide title, or generic phrase.
+        - city and neighborhood should be location hints when present.
+        - cuisine should be concise title case, such as Italian, Sushi, Mexican, Bakery, Cocktail Bar, Steakhouse, or Cafe.
+        - establishment_type must be one of: restaurant, cafe, bar, bakery, brewery, winery, other.
+        - price_tier must be one of: $, $$, $$$, $$$$.
+        - vibe_tags should contain 0 to 5 short tags useful for Scout filters, such as Date Night, Brunch, Cozy, Trendy, Casual, Rooftop, Fine Dining, Group Dinner, Quick Bite, Patio.
+        - note should summarize why this place was saved in one short sentence.
+        - confidence should be from 0.0 to 1.0.
+
+        Shared content:
+        \(text)
+        """
+    }
+}
+
+enum GeminiServiceError: LocalizedError, Equatable {
+    case missingAPIKey
+    case emptyInput
+    case invalidResponse
+    case requestFailed(statusCode: Int)
+    case missingContent
+
+    var errorDescription: String? {
+        switch self {
+        case .missingAPIKey:
+            return "Add GEMINI_API_KEY to Config.xcconfig before using Gemini parsing."
+        case .emptyInput:
+            return "There was not enough shared text to parse."
+        case .invalidResponse:
+            return "Gemini returned an invalid response."
+        case .requestFailed(let statusCode):
+            return "Gemini request failed with status \(statusCode)."
+        case .missingContent:
+            return "Gemini did not return any parseable content."
         }
     }
 }
 
-private struct GeminiRequest: Codable {
-    let contents: [GeminiContent]
-    let generationConfig: GeminiGenerationConfig
-
-    init(prompt: String) {
-        self.contents = [GeminiContent(parts: [GeminiPart(text: prompt)])]
-        self.generationConfig = GeminiGenerationConfig()
-    }
+private struct GenerateContentRequest: Encodable {
+    let contents: [Content]
+    let generationConfig: GenerationConfig
 }
 
-private struct GeminiContent: Codable {
-    let parts: [GeminiPart]
+private struct Content: Codable {
+    let parts: [Part]
 }
 
-private struct GeminiPart: Codable {
-    let text: String
-}
-
-private struct GeminiGenerationConfig: Codable {
-    let responseMimeType: String
-    let responseSchema: GeminiSchema
-
-    init() {
-        self.responseMimeType = "application/json"
-        self.responseSchema = GeminiSchema()
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case responseMimeType
-        case responseSchema
-    }
-}
-
-private struct GeminiSchema: Codable {
-    let type: String
-    let properties: [String: GeminiProperty]
-    let required: [String]
-
-    init() {
-        self.type = "OBJECT"
-        self.properties = [
-            "name": GeminiProperty(type: "STRING"),
-            "cuisine": GeminiProperty(type: "STRING"),
-            "establishmentType": GeminiProperty(type: "STRING", enumValues: ["restaurant", "cafe", "bar", "bakery", "brewery", "winery", "other"]),
-            "priceTier": GeminiProperty(type: "STRING", enumValues: ["$", "$$", "$$$", "$$$$"]),
-            "vibeTags": GeminiProperty(type: "ARRAY", items: GeminiProperty(type: "STRING")),
-            "confidence": GeminiProperty(type: "STRING", enumValues: ["low", "medium", "high"])
-        ]
-        self.required = ["name", "confidence"]
-    }
-}
-
-private final class GeminiProperty: Codable {
-    let type: String
-    let enumValues: [String]?
-    let items: GeminiProperty?
-
-    init(type: String, enumValues: [String]? = nil, items: GeminiProperty? = nil) {
-        self.type = type
-        self.enumValues = enumValues
-        self.items = items
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case enumValues = "enum"
-        case items
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(type, forKey: .type)
-        try container.encodeIfPresent(enumValues, forKey: .enumValues)
-        try container.encodeIfPresent(items, forKey: .items)
-    }
-}
-
-private struct GeminiResponse: Codable {
-    let candidates: [GeminiCandidate]?
-}
-
-private struct GeminiCandidate: Codable {
-    let content: GeminiCandidateContent?
-}
-
-private struct GeminiCandidateContent: Codable {
-    let parts: [GeminiResponsePart]?
-}
-
-private struct GeminiResponsePart: Codable {
+private struct Part: Codable {
     let text: String?
 }
 
-private struct GeminiInnerGuess: Codable {
-    let name: String?
-    let cuisine: String?
-    let establishmentType: String?
-    let priceTier: String?
-    let vibeTags: [String]?
-    let confidence: String?
+private struct GenerationConfig: Encodable {
+    let responseMimeType: String
+    let responseSchema: JSONSchema
+}
 
-    enum CodingKeys: String, CodingKey {
-        case name
-        case cuisine
-        case establishmentType
-        case priceTier
-        case vibeTags
-        case confidence
+private struct GenerateContentResponse: Decodable {
+    let candidates: [Candidate]
+}
+
+private struct Candidate: Decodable {
+    let content: Content
+}
+
+private final class JSONSchema: Encodable {
+    var type: String
+    var properties: [String: JSONSchema]?
+    var items: JSONSchema?
+    var `enum`: [String]?
+    var nullable: Bool?
+    var required: [String]?
+
+    init(
+        type: String,
+        properties: [String: JSONSchema]? = nil,
+        items: JSONSchema? = nil,
+        enum values: [String]? = nil,
+        nullable: Bool? = nil,
+        required: [String]? = nil
+    ) {
+        self.type = type
+        self.properties = properties
+        self.items = items
+        self.enum = values
+        self.nullable = nullable
+        self.required = required
+    }
+
+    static let restaurantParseResultSchema = JSONSchema(
+        type: "object",
+        properties: [
+            "restaurant_name": .string(nullable: true),
+            "city": .string(nullable: true),
+            "neighborhood": .string(nullable: true),
+            "cuisine": .string(nullable: true),
+            "establishment_type": .string(
+                enum: Restaurant.EstablishmentType.allCases.map(\.rawValue),
+                nullable: true
+            ),
+            "price_tier": .string(
+                enum: Restaurant.PriceTier.allCases.map(\.rawValue),
+                nullable: true
+            ),
+            "vibe_tags": JSONSchema(type: "array", items: .string()),
+            "note": .string(nullable: true),
+            "confidence": JSONSchema(type: "number")
+        ],
+        required: ["vibe_tags", "confidence"]
+    )
+
+    static func string(enum values: [String]? = nil, nullable: Bool? = nil) -> JSONSchema {
+        JSONSchema(type: "string", enum: values, nullable: nullable)
+    }
+}
+
+private extension GeminiRestaurantParseResult {
+    var normalized: GeminiRestaurantParseResult {
+        var copy = self
+        copy.restaurantName = restaurantName?.trimmedNonEmpty
+        copy.city = city?.trimmedNonEmpty
+        copy.neighborhood = neighborhood?.trimmedNonEmpty
+        copy.cuisine = cuisine?.trimmedNonEmpty
+        copy.note = note?.trimmedNonEmpty
+        copy.vibeTags = Array(Set(vibeTags.compactMap(\.trimmedNonEmpty)))
+            .sorted()
+            .prefix(5)
+            .map { String($0) }
+        copy.confidence = min(max(confidence, 0), 1)
+        return copy
+    }
+}
+
+private extension SharedRestaurantImport.SourceApp {
+    var displayNameForPrompt: String {
+        switch self {
+        case .appleMaps: return "Apple Maps"
+        case .googleMaps: return "Google Maps"
+        case .tiktok: return "TikTok"
+        case .instagram: return "Instagram"
+        case .social: return "social"
+        case .safari: return "Safari"
+        case .other: return "shared"
+        }
     }
 }
 
 private extension String {
     var nonEmpty: String? {
+        isEmpty ? nil : self
+    }
+
+    var trimmedNonEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var cleanedJSONString: String {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("```") else { return trimmed }
+        return trimmed
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```JSON", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

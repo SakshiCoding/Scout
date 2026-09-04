@@ -6,6 +6,8 @@
 	<string>$(GOOGLE_MAPS_API_KEY)</string>
 	<key>GEMINI_API_KEY</key>
 	<string>$(GEMINI_API_KEY)</string>
+	<key>GEMINI_MODEL</key>
+	<string>$(GEMINI_MODEL)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Scout uses your location to sort restaurants by distance and show them on the map.</string>
 	<key>NSCameraUsageDescription</key>
