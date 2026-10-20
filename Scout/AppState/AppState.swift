@@ -1,4 +1,6 @@
+import Combine
 import SwiftUI
+import WidgetKit
 import Supabase
 
 @MainActor
@@ -6,17 +8,17 @@ import Supabase
 final class AppState {
     // MARK: - Auth
     var currentUser: User?
-    var isAuthenticated = false
+    var isAuthenticated = false { didSet { publishWidgetSnapshot() } }
     var isLoadingAuth   = true
     var isPasswordRecovery = false
     var passwordRecoveryError: String?
 
     // MARK: - Circles
     var circles: [ScoutCircle] = []
-    var activeCircle: ScoutCircle?
+    var activeCircle: ScoutCircle? { didSet { publishWidgetSnapshot() } }
 
     // MARK: - Restaurants
-    var restaurants: [Restaurant] = []
+    var restaurants: [Restaurant] = [] { didSet { publishWidgetSnapshot() } }
     var isLoadingRestaurants = false
 
     // MARK: - Journal
@@ -26,6 +28,9 @@ final class AppState {
     private var pendingVisitIds: Set<UUID> = []
     private var pendingMediaIds: Set<UUID> = []
     private var journalLoadRequestId = UUID()
+
+    // Widget deep links use the existing tab shell, including a cold launch through auth.
+    var requestedTab: TabItem?
 
     // MARK: - Wishlist UI state
     var activeTab: WishlistTab = .wantToTry
@@ -108,7 +113,17 @@ final class AppState {
     let gemini    = GeminiService.shared
     let mediaService = MediaService()
 
+    @ObservationIgnored private var authObservation: AnyCancellable?
+
     init() {
+        authObservation = auth.$isAuthenticated.removeDuplicates().sink { [weak self] authenticated in
+            guard let self, !authenticated else { return }
+            self.isAuthenticated = false
+            self.currentUser = nil
+            self.activeCircle = nil
+            self.restaurants = []
+            self.isLoadingRestaurants = false
+        }
         observeAuth()
     }
 
@@ -152,6 +167,7 @@ final class AppState {
                 fetched[i].restaurantCount = rests?.filter { $0.status == .wantToTry }.count ?? 0
                 fetched[i].visitedCount    = rests?.filter { $0.status == .visited }.count ?? 0
             }
+            guard isAuthenticated, currentUser?.id == userId else { return }
             circles = fetched
             restoreActiveCircle()
         } catch {
@@ -162,13 +178,18 @@ final class AppState {
     func loadRestaurants() async {
         guard let circleId = activeCircle?.id else { return }
         isLoadingRestaurants = true
+        defer {
+            if activeCircle?.id == circleId { isLoadingRestaurants = false }
+        }
         do {
             let fetched = try await supabase.fetchRestaurants(circleId: circleId)
-            restaurants = await places.enrichGoogleRestaurants(fetched)
+            let enriched = await places.enrichGoogleRestaurants(fetched)
+            guard isAuthenticated, activeCircle?.id == circleId else { return }
+            restaurants = enriched
         } catch {
+            guard isAuthenticated, activeCircle?.id == circleId else { return }
             restaurants = []
         }
-        isLoadingRestaurants = false
         restorePickMatch()
     }
 
@@ -263,6 +284,10 @@ final class AppState {
     func handleOpenURL(_ url: URL) {
         guard url.scheme == "scout" else { return }
         switch url.host {
+        case "wishlist":
+            activeTab = .wantToTry
+            filterState.reset()
+            requestedTab = .list
         case "import-pending":
             loadPendingSharedImport()
         case "password-reset":
@@ -543,6 +568,22 @@ final class AppState {
     }
 
     // MARK: - Private
+
+    private func publishWidgetSnapshot() {
+        let store = ScoutWidgetStore()
+        let saved: Bool
+        if isAuthenticated {
+            saved = store.save(ScoutWidgetSnapshot(
+                isSignedIn: true,
+                circleId: activeCircle?.id,
+                circleName: activeCircle?.name,
+                restaurants: restaurants
+            ))
+        } else {
+            saved = store.clear()
+        }
+        if saved { WidgetCenter.shared.reloadTimelines(ofKind: ScoutWidgetSnapshot.kind) }
+    }
 
     private func upsertVisit(_ visit: Visit) {
         visits.removeAll { $0.id == visit.id }
