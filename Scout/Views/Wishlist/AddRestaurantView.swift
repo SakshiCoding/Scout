@@ -25,6 +25,20 @@ struct AddRestaurantView: View {
     @State private var selectedGooglePlaceId: String?
     @State private var searchTask: Task<Void, Never>?
 
+    @State private var metadataRequest: MetadataRequest?
+    @State private var isAutofilling = false
+    @State private var autofillMessage: String?
+    @State private var didEditCuisine = false
+    @State private var didEditVibes = false
+    @State private var generatedCuisine: String?
+    @State private var generatedVibes: Set<String> = []
+
+    private struct MetadataRequest: Equatable {
+        let id = UUID()
+        let name: String
+        let address: String?
+    }
+
     private let popularCuisines = [
         "American", "Italian", "Mexican", "Japanese", "Chinese",
         "Thai", "Indian", "Mediterranean", "French", "Korean",
@@ -32,9 +46,7 @@ struct AddRestaurantView: View {
         "Spanish", "Middle Eastern"
     ]
 
-    private let vibes = ["Date night", "Casual", "Brunch", "Group", "Solo",
-                         "Patio", "Late night", "Special occasion",
-                         "Quick bite", "Lively", "Quiet", "Tasting menu"]
+    private let vibes = RestaurantMetadataSuggestion.allowedVibes
 
     private var orderedCuisines: [String] {
         guard !cuisine.isEmpty, let idx = popularCuisines.firstIndex(of: cuisine) else {
@@ -79,6 +91,10 @@ struct AddRestaurantView: View {
                         selectedAddressRow(addr)
                     }
 
+                    if appState.gemini.isConfigured {
+                        metadataAutofillControl
+                    }
+
                     Divider().background(Atlas.rule)
 
                     // Establishment type pills
@@ -91,6 +107,7 @@ struct AddRestaurantView: View {
                                         isActive: establishmentType == type
                                     ) {
                                         withAnimation(.easeInOut(duration: 0.2)) {
+                                            didEditCuisine = true
                                             establishmentType = type
                                             if type != .restaurant {
                                                 cuisine = ""
@@ -113,6 +130,7 @@ struct AddRestaurantView: View {
                                     HStack(spacing: 6) {
                                         ForEach(orderedCuisines, id: \.self) { c in
                                             FilterChip(label: c, isActive: !showCuisineOtherField && cuisine == c) {
+                                                didEditCuisine = true
                                                 withAnimation(.easeInOut(duration: 0.15)) {
                                                     if cuisine == c {
                                                         cuisine = ""
@@ -125,6 +143,7 @@ struct AddRestaurantView: View {
                                             }
                                         }
                                         FilterChip(label: "Other", isActive: showCuisineOtherField) {
+                                            didEditCuisine = true
                                             withAnimation(.easeInOut(duration: 0.15)) {
                                                 showCuisineOtherField.toggle()
                                                 if showCuisineOtherField { cuisine = "" }
@@ -135,7 +154,10 @@ struct AddRestaurantView: View {
                                 }
 
                                 if showCuisineOtherField {
-                                    TextField("Enter cuisine…", text: $cuisineOtherText)
+                                    TextField("Enter cuisine…", text: Binding(
+                                        get: { cuisineOtherText },
+                                        set: { didEditCuisine = true; cuisineOtherText = $0 }
+                                    ))
                                         .font(Atlas.Font.sans(15))
                                         .foregroundColor(Atlas.ink)
                                         .padding(.horizontal, 12)
@@ -168,6 +190,7 @@ struct AddRestaurantView: View {
                             HStack(spacing: 6) {
                                 ForEach(orderedVibes, id: \.self) { vibe in
                                     FilterChip(label: vibe, isActive: selectedVibeTags.contains(vibe)) {
+                                        didEditVibes = true
                                         if selectedVibeTags.contains(vibe) {
                                             selectedVibeTags.remove(vibe)
                                         } else {
@@ -233,6 +256,11 @@ struct AddRestaurantView: View {
                 }
             }
         }
+        .task(id: metadataRequest) {
+            guard let request = metadataRequest else { return }
+            await autofillMetadata(request)
+        }
+        .onDisappear { searchTask?.cancel() }
         .onChange(of: name) { _, newValue in
             handleNameChange(newValue)
         }
@@ -322,14 +350,17 @@ struct AddRestaurantView: View {
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-            suggestions = await PlacesService.shared.search(
+            let results = await PlacesService.shared.search(
                 query: newValue,
                 near: appState.location.userLocation
             )
+            guard !Task.isCancelled, name == newValue, selectedPlace == nil else { return }
+            suggestions = results
         }
     }
 
     private func selectPlace(_ item: PlaceSearchResult) {
+        resetMetadataSuggestions()
         selectedPlace = item
         name = item.name
         selectedAddress = item.address
@@ -342,7 +373,8 @@ struct AddRestaurantView: View {
                 establishmentType = detectedType
             }
         }
-        if let detectedCuisine = item.cuisine, cuisine.isEmpty, cuisineOtherText.isEmpty {
+        if let detectedCuisine = item.cuisine, !RestaurantMetadataSuggestion.isGenericCuisine(detectedCuisine),
+           !didEditCuisine, cuisine.isEmpty, cuisineOtherText.isEmpty {
             if popularCuisines.contains(detectedCuisine) {
                 cuisine = detectedCuisine
                 showCuisineOtherField = false
@@ -354,18 +386,100 @@ struct AddRestaurantView: View {
         if let detectedPrice = item.priceTier {
             priceTier = detectedPrice
         }
-        selectedVibeTags.formUnion(item.vibeHints)
+        if !didEditVibes { selectedVibeTags.formUnion(item.vibeHints) }
 
         suggestions = []
         searchTask?.cancel()
+        if appState.gemini.isConfigured, RestaurantMetadataSuggestion.isGenericCuisine(item.cuisine) {
+            metadataRequest = MetadataRequest(name: item.name, address: item.address)
+        }
     }
 
     private func clearSelectedPlace() {
+        resetMetadataSuggestions()
         selectedPlace = nil
         selectedAddress = nil
         selectedLat = nil
         selectedLon = nil
         selectedGooglePlaceId = nil
+    }
+
+    // MARK: - Optional metadata fallback
+
+    private var metadataAutofillControl: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                metadataRequest = MetadataRequest(name: name, address: selectedAddress)
+            } label: {
+                HStack(spacing: 8) {
+                    if isAutofilling { ProgressView().tint(Atlas.burnt) }
+                    Text(isAutofilling ? "Finding cuisine & vibes…" : "Suggest cuisine & vibes")
+                        .font(Atlas.Font.sans(13, weight: .medium))
+                }
+                .foregroundColor(Atlas.burnt)
+            }
+            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || isAutofilling || isSaving)
+            if let autofillMessage {
+                Text(autofillMessage)
+                    .font(Atlas.Font.sans(12))
+                    .foregroundColor(Atlas.ink2)
+            }
+        }
+        .padding(.horizontal, Atlas.screenHPad)
+        .padding(.vertical, 10)
+    }
+
+    private func resetMetadataSuggestions() {
+        metadataRequest = nil
+        isAutofilling = false
+        autofillMessage = nil
+        if !didEditCuisine, generatedCuisine != nil {
+            cuisine = ""
+            cuisineOtherText = ""
+            showCuisineOtherField = false
+        }
+        if !didEditVibes { selectedVibeTags.subtract(generatedVibes) }
+        generatedCuisine = nil
+        generatedVibes = []
+    }
+
+    private func autofillMetadata(_ request: MetadataRequest) async {
+        isAutofilling = true
+        autofillMessage = nil
+        defer {
+            if metadataRequest == request { isAutofilling = false }
+        }
+        do {
+            let suggestion = try await appState.gemini.suggestMetadata(name: request.name, address: request.address)
+            guard !Task.isCancelled, metadataRequest == request,
+                  name == request.name, selectedAddress == request.address, !isSaving else { return }
+            guard let suggestion else {
+                autofillMessage = "No confident suggestions. You can choose details below."
+                return
+            }
+            var applied = false
+            if !didEditCuisine, establishmentType == .restaurant,
+               cuisine.isEmpty, cuisineOtherText.isEmpty, let value = suggestion.cuisine {
+                if popularCuisines.contains(value) {
+                    cuisine = value
+                    showCuisineOtherField = false
+                } else {
+                    cuisineOtherText = value
+                    showCuisineOtherField = true
+                }
+                generatedCuisine = value
+                applied = true
+            }
+            if !didEditVibes {
+                generatedVibes.formUnion(suggestion.vibeTags.subtracting(selectedVibeTags))
+                selectedVibeTags.formUnion(suggestion.vibeTags)
+                applied = applied || !suggestion.vibeTags.isEmpty
+            }
+            autofillMessage = applied ? "Suggested details — edit anything below." : "Your selected details are unchanged."
+        } catch {
+            guard !Task.isCancelled, metadataRequest == request else { return }
+            autofillMessage = "Suggestions are unavailable. You can choose details below."
+        }
     }
 
     // MARK: - Save
