@@ -8,12 +8,12 @@ Scout is a shared restaurant wishlist iOS app organized around **circles** — n
 
 ## Current State
 
-The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, and optional name-based cuisine/vibe suggestions in the add form are implemented.
+The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, and the first Scout Home Screen widget are implemented.
 
 | File | Status |
 |------|--------|
 | `Scout/ScoutApp.swift` | App entry point; creates and injects `AppState` |
-| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, Google Place detail refreshes, shared import state/debug fixtures, and pick match persistence (`activePickMatch`, `savePickMatch`, `clearPickMatch`, `restorePickMatch`) |
+| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, Google Place detail refreshes, shared import state/debug fixtures, pick match persistence (`activePickMatch`, `savePickMatch`, `clearPickMatch`, `restorePickMatch`), widget snapshot publishing, sign-out cleanup, and wishlist widget links |
 | `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; persists Google Place IDs, includes journal reads, private storage downloads, and direct picks table access (`savePick`, `fetchTodayPick`) |
 | `Scout/Services/AuthService.swift` | Auth session handling, email/Apple sign-in, password-reset email requests, recovery callback sessions, and password updates |
 | `Scout/Services/LocationService.swift` | Location permissions, tap-triggered current-location requests, immediate post-authorization location refresh, and distance sorting |
@@ -27,7 +27,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping and password-reset email action |
 | `Scout/Views/Auth/ResetPasswordView.swift` | Recovery-link destination for choosing and saving a new password |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows; add form automatically requests Gemini cuisine/vibe suggestions for generic Places results and offers a manual suggestion button, preserving user edits and rejecting stale responses |
-| `Tests/` | Credential-free Gemini metadata/transport regression harness; run `Tests/run-metadata-tests.sh` on macOS with Xcode command-line tools |
+| `Tests/` | Credential-free Gemini and widget snapshot regression harnesses; run `Tests/run-metadata-tests.sh` and `Tests/run-widget-tests.sh` on macOS with Xcode command-line tools |
 | `Scout/Views/Import/ImportReviewView.swift` | Main-app import review sheet for shared Safari/Apple Maps/Google Maps/TikTok/Instagram places: circle selection, Gemini-powered social text prefill, Places match suggestions, manual fallback when no match is found, note, and save |
 | `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut, and reservation/contact actions |
 | `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
@@ -39,6 +39,8 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Shared/` | Shared small UI components and Atlas icons |
 | `ScoutShareExtension/` | Share Extension target: captures URL/text from Safari, Apple Maps, Google Maps, TikTok, Instagram, and other social links; supports Apple Maps MapKit place payloads; safely parses place hints/coordinates from shared links and text, expands Google Maps short links when possible, applies first-pass social caption cleanup, writes a pending import through the App Group, and opens Scout |
 | `Scout/Models/` | Circle, restaurant, visit, and media models |
+| `Scout/Models/ScoutWidgetSnapshot.swift` | Bounded active-circle wishlist projection and atomic App Group file store; no credentials, notes, or media; signed-out, no-circle, empty, ready, and 24-hour stale states |
+| `ScoutWidgetExtension/` | Embedded WidgetKit extension with small/medium Home Screen wishlist layouts, timeline provider, shared Atlas theme/fonts, App Group entitlement, and `scout://wishlist` link |
 
 Supabase Swift, Google Places SDK, and Google Maps SDK are added through Swift Package Manager. Do not remove or recreate package dependencies unless the task explicitly requires it.
 
@@ -228,6 +230,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 11 | `CrossPostSheet` | — | Implemented | Copy a journal photo/video into another circle's matching restaurant journal or share externally through iOS |
 | 12 | `ImportReviewView` | — | Implemented | Main-app review sheet launched from the Share Extension or debug simulator test hook; confirms Safari/Apple Maps/Google Maps/TikTok/Instagram imports, uses Gemini to prefill social restaurant hints, chooses circle, matches Google/Apple Places results, keeps manual name edits, and saves to wishlist even when no exact match is found |
 | 13 | `ResetPasswordView` | — | Implemented | Full-screen password recovery form opened by Supabase email links through `scout://password-reset` |
+| 14 | `ScoutWidgetView` | Home Screen | Implemented | Small widget shows the newest saved place; medium shows up to three, with active circle and total wishlist count; handles sign-in/no-circle/empty/stale states and opens the existing List tab |
 
 ### Key layout rules across all screens
 
@@ -291,7 +294,7 @@ Phase 1 verified behavior:
 - [x] TikTok/Gemini structured parser UI integration (AI-assisted restaurant/city/cuisine/vibe extraction in import review)
 - [x] GeminiService (Google Gemini API — structured JSON caption parsing from TikTok/social)
 - [x] Gemini cuisine + vibe autofill from restaurant name (AddRestaurantView: automatic fallback for generic Places cuisine, optional manual name/address suggestions, confidence threshold, canonical vibe labels, user-edit protection, cancellation/stale-response guards, and nonblocking manual fallback)
-- [ ] ScoutWidget (WidgetKit)
+- [x] ScoutWidget (WidgetKit: small/medium active-circle wishlist, shared App Group snapshot, change-driven reloads, sign-out cleanup, 24-hour stale state, and wishlist deep link)
 - [ ] Siri Shortcut
 - [ ] App icon + branding assets
 - [ ] Performance + polish pass
@@ -299,6 +302,40 @@ Phase 1 verified behavior:
 Name-based suggestions require `GEMINI_API_KEY` in the ignored `Scout/Config.xcconfig` (existing `GEMINI_MODEL` setting is reused). They fill only empty cuisine and add canonical vibes; specific Places cuisine and user choices take precedence. No key hides the suggestion control. Unknown businesses, low confidence, and API errors leave the form usable, and Save never waits for suggestions. Suggestions apply only in the add form; bulk import and existing saved restaurants are unchanged.
 
 Verification: `Tests/run-metadata-tests.sh` exercises the production service with mocked URLSession responses (request schema/address context, canonical tags, low confidence, generic metadata, missing key, cancellation, HTTP/malformed-response errors, and social-parser regression). The harness needs no API key or Supabase access. UI walkthrough checks are documented in `Tests/README.md`.
+
+---
+
+### ScoutWidget behavior and verification
+
+The Home Screen widget reads only `scout-widget.json` from `group.com.sakshisangani.Scout`. AppState publishes a bounded projection when auth, active circle, or restaurant data changes and requests a WidgetKit timeline reload. Only unvisited restaurants in the active circle are included, newest first with a stable ID tie-break; the total count covers the full wishlist while the snapshot stores at most three display rows. Sign-out clears the cache. No Supabase sessions or API keys are shared with the extension.
+
+WidgetKit controls refresh timing. The provider rereads the local cache on its timeline and schedules a stale state at 24 hours; updates from other members appear after the app fetches them. Tapping opens `scout://wishlist`, selects List / want-to-try, and resets filters in the existing shell. The widget does not implement the deferred recipe cooking / Live Activity idea.
+
+`Tests/run-widget-tests.sh` verifies filtering, ordering, counts, cache round trips, updates, circle switches, sign-out removal, malformed/versioned data, unavailable App Groups, expiry, and the URL contract. See `Tests/README.md` for simulator widget walkthroughs. Device distribution requires provisioning the new `com.sakshisangani.Scout.WidgetExtension` bundle identifier with the same App Group as Scout; simulator builds do not verify device provisioning.
+
+---
+
+## Future Add-ons — Ideas Backlog
+
+These are deferred product ideas outside the current restaurant wishlist, picker, and journal scope. They are not part of the active Phase 3 checklist or the next feature to build unless explicitly prioritized.
+
+### Social Recipe Library & Guided Cooking
+
+**Problem:** Recipes saved on Instagram Reels or TikTok get buried and never cooked. Following a video while cooking also requires repeatedly reopening the social app, replaying sections, and unlocking the phone.
+
+**Concept:** Share a recipe video link to Scout, process it into a structured recipe, and save it in a dedicated recipe library. Let the user review the extracted ingredients, quantities, servings, ordered instructions, and step-specific timers, with a link back to the original creator/video.
+
+Potential features:
+
+- [ ] Recipe link import from Instagram Reels and TikTok through Scout's share flow, distinct from restaurant imports.
+- [ ] A browsable saved-recipe library so recipes remain easy to find and cook later.
+- [ ] Guided cooking in the app, showing the current instruction, progress, and any timer for that step.
+- [ ] Apple widgets / Live Activities for the current instruction and active timer, aiming to reduce repeated app opening and phone unlocking while cooking. Explore the appropriate iOS surfaces and interaction limits when this is prioritized.
+- [ ] Small reference images or short clips from the source video alongside relevant recipe steps, where source access and media reuse permit.
+- [ ] Optional notifications and reminders that help users revisit saved recipes when they are in the mood to cook; timing and preferences should be user-controlled.
+- [ ] Dynamic ingredient quantities: scale a recipe from a chosen anchor ingredient amount, such as the weight of protein or pasta available, as well as by servings. Show updated measurements and allow corrections; cooking times and temperatures need separate handling rather than automatic proportional scaling.
+
+Before implementation, decide how recipe videos can be accessed and processed, how uncertain or missing extraction details are reviewed, how recipe storage relates to circles, and which cooking surfaces belong in the first release. Reuse Scout's existing share infrastructure, AppState, and Atlas design system when developing this add-on.
 
 ---
 

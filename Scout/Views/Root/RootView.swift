@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedTab: TabItem = .list
+    @State private var wishlistNavigationID = UUID()
 
     var body: some View {
         Group {
@@ -16,6 +17,13 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: appState.isAuthenticated)
         .animation(.easeInOut(duration: 0.2), value: appState.isLoadingAuth)
+        .onChange(of: appState.requestedTab, initial: true) { _, tab in
+            if let tab {
+                selectedTab = tab
+                if tab == .list { wishlistNavigationID = UUID() }
+                appState.requestedTab = nil
+            }
+        }
         .onAppear {
             appState.loadPendingSharedImport()
         }
@@ -103,7 +111,7 @@ struct RootView: View {
     @ViewBuilder
     private var tabContent: some View {
         switch selectedTab {
-        case .list:    WishlistView()
+        case .list:    WishlistView().id(wishlistNavigationID)
         case .map:     MapView()
         case .pick:    PickerView()
         case .journal: JournalIndexView { selectedTab = .list }

@@ -17,6 +17,17 @@
 		A10000012FE0000000000001 /* GooglePlaces in Frameworks */ = {isa = PBXBuildFile; productRef = A10000022FE0000000000002 /* GooglePlaces */; };
 		A10000042FE0000000000004 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = A10000052FE0000000000005 /* GoogleMaps */; };
 		B30000052FE3000000000005 /* Scout/Models/SharedRestaurantImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30000062FE3000000000006 /* Scout/Models/SharedRestaurantImport.swift */; };
+		D40000000000000000000014 /* ScoutWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000002; };
+		D40000000000000000000015 /* ScoutWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000005; };
+		D40000000000000000000016 /* Restaurant.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000006; };
+		D40000000000000000000017 /* AtlasTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000007; };
+		D40000000000000000000018 /* ScoutWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D40000000000000000000001; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D40000000000000000000019 /* Font in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788EC2FB6CA04005C3190; };
+		D4000000000000000000001A /* Font in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788EB2FB6CA04005C3190; };
+		D4000000000000000000001B /* Font in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F02FB6CBAA005C3190; };
+		D4000000000000000000001C /* Font in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F22FB6CBD1005C3190; };
+		D4000000000000000000001D /* Font in Resources */ = {isa = PBXBuildFile; fileRef = 0C1788F42FB6CBF6005C3190; };
+		D40000000000000000000029 /* ScoutWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40000000000000000000028; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,6 +38,7 @@
 			remoteGlobalIDString = 1CA893122FE9B15800902145;
 			remoteInfo = ScoutShareExtension;
 		};
+		D4000000000000000000001E = {isa = PBXContainerItemProxy; containerPortal = 1C8ED52D2FB3B5890059C826; proxyType = 1; remoteGlobalIDString = D40000000000000000000009; remoteInfo = ScoutWidgetExtension; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -37,6 +49,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				1CA8931D2FE9B15800902145 /* ScoutShareExtension.appex in Embed App Extensions */,
+				D40000000000000000000018 /* ScoutWidgetExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -52,6 +65,14 @@
 		1C8ED5352FB3B5890059C826 /* Scout.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Scout.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CA893132FE9B15800902145 /* ScoutShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ScoutShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B30000062FE3000000000006 /* Scout/Models/SharedRestaurantImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scout/Models/SharedRestaurantImport.swift; sourceTree = SOURCE_ROOT; };
+		D40000000000000000000001 /* ScoutWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ScoutWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D40000000000000000000002 /* ScoutWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutWidget.swift; sourceTree = "<group>"; };
+		D40000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D40000000000000000000004 /* ScoutWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ScoutWidgetExtension.entitlements; sourceTree = "<group>"; };
+		D40000000000000000000005 /* ScoutWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scout/Models/ScoutWidgetSnapshot.swift; sourceTree = SOURCE_ROOT; };
+		D40000000000000000000006 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scout/Models/Restaurant.swift; sourceTree = SOURCE_ROOT; };
+		D40000000000000000000007 /* AtlasTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scout/Theme/AtlasTheme.swift; sourceTree = SOURCE_ROOT; };
+		D40000000000000000000028 /* ScoutWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutWidgetView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -125,6 +146,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4000000000000000000000C = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -141,6 +169,7 @@
 			children = (
 				1C8ED5372FB3B5890059C826 /* Scout */,
 				1CA893142FE9B15800902145 /* ScoutShareExtension */,
+				D40000000000000000000008 /* ScoutWidgetExtension */,
 				1C8ED5362FB3B5890059C826 /* Products */,
 				0C1788EB2FB6CA04005C3190 /* DMSerifDisplay-Italic.ttf */,
 				0C1788EC2FB6CA04005C3190 /* DMSerifDisplay-Regular.ttf */,
@@ -156,8 +185,23 @@
 			children = (
 				1C8ED5352FB3B5890059C826 /* Scout.app */,
 				1CA893132FE9B15800902145 /* ScoutShareExtension.appex */,
+				D40000000000000000000001 /* ScoutWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000008 /* ScoutWidgetExtension */ = {
+			isa = PBXGroup;
+			children = (
+				D40000000000000000000002,
+				D40000000000000000000028,
+				D40000000000000000000003,
+				D40000000000000000000004,
+				D40000000000000000000005,
+				D40000000000000000000006,
+				D40000000000000000000007,
+			);
+			path = ScoutWidgetExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -176,6 +220,7 @@
 			);
 			dependencies = (
 				1CA8931C2FE9B15800902145 /* PBXTargetDependency */,
+				D4000000000000000000001F /* Widget target dependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1C8ED5372FB3B5890059C826 /* Scout */,
@@ -210,6 +255,17 @@
 			);
 			productName = ScoutShareExtension;
 			productReference = 1CA893132FE9B15800902145 /* ScoutShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		D40000000000000000000009 /* ScoutWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D4000000000000000000000D;
+			buildPhases = (D4000000000000000000000A, D4000000000000000000000C, D4000000000000000000000B, );
+			buildRules = ();
+			dependencies = ();
+			name = ScoutWidgetExtension;
+			productName = ScoutWidgetExtension;
+			productReference = D40000000000000000000001;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -251,6 +307,7 @@
 			targets = (
 				1C8ED5342FB3B5890059C826 /* Scout */,
 				1CA893122FE9B15800902145 /* ScoutShareExtension */,
+				D40000000000000000000009 /* ScoutWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -275,6 +332,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4000000000000000000000B = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D40000000000000000000019,
+				D4000000000000000000001A,
+				D4000000000000000000001B,
+				D4000000000000000000001C,
+				D4000000000000000000001D,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -293,6 +362,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4000000000000000000000A = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D40000000000000000000014,
+				D40000000000000000000029,
+				D40000000000000000000015,
+				D40000000000000000000016,
+				D40000000000000000000017,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -301,6 +382,7 @@
 			target = 1CA893122FE9B15800902145 /* ScoutShareExtension */;
 			targetProxy = 1CA8931B2FE9B15800902145 /* PBXContainerItemProxy */;
 		};
+		D4000000000000000000001F = {isa = PBXTargetDependency; target = D40000000000000000000009; targetProxy = D4000000000000000000001E; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -577,6 +659,58 @@
 			};
 			name = Release;
 		};
+		D4000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ScoutWidgetExtension/ScoutWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 345D62AZC4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScoutWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Scout Wishlist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sakshisangani.Scout.WidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D4000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ScoutWidgetExtension/ScoutWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 345D62AZC4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScoutWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Scout Wishlist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sakshisangani.Scout.WidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -604,6 +738,12 @@
 				1CA8931F2FE9B15800902145 /* Debug */,
 				1CA893202FE9B15800902145 /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D4000000000000000000000D = {
+			isa = XCConfigurationList;
+			buildConfigurations = (D4000000000000000000000E, D4000000000000000000000F, );
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
