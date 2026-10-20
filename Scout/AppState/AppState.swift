@@ -8,14 +8,17 @@ import Supabase
 final class AppState {
     // MARK: - Auth
     var currentUser: User?
-    var isAuthenticated = false { didSet { publishWidgetSnapshot() } }
+    var isAuthenticated = false { didSet { if !isAuthenticated { resetPickState() }; publishWidgetSnapshot() } }
     var isLoadingAuth   = true
     var isPasswordRecovery = false
     var passwordRecoveryError: String?
 
     // MARK: - Circles
     var circles: [ScoutCircle] = []
-    var activeCircle: ScoutCircle? { didSet { publishWidgetSnapshot() } }
+    var activeCircle: ScoutCircle? { didSet {
+        if oldValue?.id != activeCircle?.id { resetPickState() }
+        publishWidgetSnapshot()
+    } }
 
     // MARK: - Restaurants
     var restaurants: [Restaurant] = [] { didSet { publishWidgetSnapshot() } }
@@ -36,73 +39,83 @@ final class AppState {
     var activeTab: WishlistTab = .wantToTry
     var filterState = FilterState()
 
-    // MARK: - Pick UI state (persisted across launches)
-    var activePickMatch: Restaurant?
+    // MARK: - Shared pick state
+    var pickSession: SharedPickSession?
+    var pickError: String?
+    var isPickBusy = false
+    private var pickScopeID = UUID()
+    var activePickMatch: Restaurant? {
+        pickSession?.restaurants.first { $0.id == pickSession?.matchedRestaurantId }
+    }
 
     // MARK: - Shared import flow
     var pendingSharedImport: SharedRestaurantImport?
 
-    private static let matchRestaurantKey = "scout.pick.matchRestaurantId"
-    private static let matchCircleKey     = "scout.pick.matchCircleId"
-    private static let matchDateKey       = "scout.pick.matchDate"
+    private func resetPickState() {
+        pickScopeID = UUID()
+        pickSession = nil
+        pickError = nil
+        isPickBusy = false
+    }
 
-    func savePickMatch(_ restaurant: Restaurant) {
-        guard let circleId = activeCircle?.id,
-              let userId = currentUser?.id else { return }
-        activePickMatch = restaurant
-        // Cache locally so the UI updates instantly, then persist to Supabase
-        cachePickLocally(restaurantId: restaurant.id, circleId: circleId)
-        Task {
-            try? await supabase.savePick(circleId: circleId, restaurantId: restaurant.id, userId: userId)
+    func observePickSession(circleId: UUID) async {
+        let scope = UUID()
+        pickScopeID = scope
+        let channel = supabase.client.channel("pick-\(circleId)-\(scope)")
+        let changes = channel.postgresChange(AnyAction.self, schema: "public", table: "pick_sessions",
+                                              filter: .eq("circle_id", value: circleId.uuidString))
+        defer {
+            if pickScopeID == scope { pickScopeID = UUID(); isPickBusy = false }
+            Task { await supabase.client.removeChannel(channel) }
         }
-    }
-
-    func clearPickMatch() {
-        activePickMatch = nil
-        let ud = UserDefaults.standard
-        ud.removeObject(forKey: Self.matchRestaurantKey)
-        ud.removeObject(forKey: Self.matchCircleKey)
-        ud.removeObject(forKey: Self.matchDateKey)
-    }
-
-    func restorePickMatch() {
-        guard let circleId = activeCircle?.id else { return }
-        // Try Supabase first; fall back to local cache if offline
-        Task {
-            if let restaurantId = try? await supabase.fetchTodayPick(circleId: circleId) {
-                activePickMatch = restaurants.first { $0.id == restaurantId }
-                if let match = activePickMatch {
-                    cachePickLocally(restaurantId: match.id, circleId: circleId)
-                }
-            } else {
-                restorePickFromCache(circleId: circleId)
+        await refreshPick(circleId: circleId, scope: scope)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { [weak self] in
+                do {
+                    try await channel.subscribeWithError()
+                    for await _ in changes {
+                        guard !Task.isCancelled else { break }
+                        await self?.refreshPick(circleId: circleId, scope: scope)
+                    }
+                } catch { /* Polling below also recovers missed events and unavailable Realtime. */ }
             }
+            group.addTask { [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(5)) } catch { break }
+                    await self?.refreshPick(circleId: circleId, scope: scope)
+                }
+            }
+            await group.waitForAll()
         }
     }
 
-    private func cachePickLocally(restaurantId: UUID, circleId: UUID) {
-        let ud = UserDefaults.standard
-        ud.set(restaurantId.uuidString, forKey: Self.matchRestaurantKey)
-        ud.set(circleId.uuidString,     forKey: Self.matchCircleKey)
-        ud.set(todayString,             forKey: Self.matchDateKey)
-    }
-
-    private func restorePickFromCache(circleId: UUID) {
-        let ud = UserDefaults.standard
-        guard let rid = ud.string(forKey: Self.matchRestaurantKey),
-              let restaurantId = UUID(uuidString: rid),
-              let cid = ud.string(forKey: Self.matchCircleKey),
-              UUID(uuidString: cid) == circleId,
-              ud.string(forKey: Self.matchDateKey) == todayString else {
-            clearPickMatch()
-            return
+    private func refreshPick(circleId: UUID, scope: UUID) async {
+        guard !Task.isCancelled, isAuthenticated, activeCircle?.id == circleId, pickScopeID == scope, !isPickBusy else { return }
+        do {
+            let snapshot = try await supabase.sharedPick(circleId: circleId)
+            guard !Task.isCancelled, pickScopeID == scope, activeCircle?.id == circleId else { return }
+            if snapshot.canReplace(pickSession) { pickSession = snapshot; pickError = nil }
+        } catch {
+            guard !Task.isCancelled, pickScopeID == scope else { return }
+            pickError = "Couldn't sync this round. Check your connection and try again."
         }
-        activePickMatch = restaurants.first { $0.id == restaurantId }
     }
 
-    private var todayString: String {
-        let c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-        return "\(c.year!)-\(c.month!)-\(c.day!)"
+    func sendPickAction(_ action: String, restaurantId: UUID? = nil, yes: Bool? = nil) async {
+        guard !isPickBusy, let snapshot = pickSession,
+              isAuthenticated, activeCircle?.id == snapshot.circleId else { return }
+        let scope = pickScopeID
+        isPickBusy = true
+        defer { if pickScopeID == scope { isPickBusy = false } }
+        do {
+            let updated = try await supabase.sharedPick(circleId: snapshot.circleId, action: action,
+                sessionId: snapshot.id, restaurantId: restaurantId, yes: yes)
+            guard !Task.isCancelled, pickScopeID == scope, activeCircle?.id == updated.circleId else { return }
+            if updated.canReplace(pickSession) { pickSession = updated; pickError = nil }
+        } catch {
+            guard pickScopeID == scope else { return }
+            pickError = "Your change wasn't confirmed. Wait for this round to sync before trying again."
+        }
     }
 
     // MARK: - Services
@@ -190,7 +203,6 @@ final class AppState {
             guard isAuthenticated, activeCircle?.id == circleId else { return }
             restaurants = []
         }
-        restorePickMatch()
     }
 
     func loadJournal() async {
