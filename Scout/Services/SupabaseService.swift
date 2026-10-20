@@ -316,47 +316,21 @@ final class SupabaseService {
 
     // MARK: - Picks
 
-    func savePick(circleId: UUID, restaurantId: UUID, userId: UUID) async throws {
-        struct PickRow: Encodable {
-            let circleId: UUID
-            let restaurantId: UUID
-            let createdBy: UUID
-            enum CodingKeys: String, CodingKey {
-                case circleId = "circle_id"
-                case restaurantId = "restaurant_id"
-                case createdBy = "created_by"
-            }
+    func sharedPick(circleId: UUID, action: String = "sync", sessionId: UUID? = nil,
+                    restaurantId: UUID? = nil, yes: Bool? = nil) async throws -> SharedPickSession {
+        struct Params: Encodable {
+            let p_circle_id: UUID
+            let p_action: String
+            let p_session_id: UUID?
+            let p_restaurant_id: UUID?
+            let p_yes: Bool?
+            let p_window: Int
         }
-        try await client
-            .from("picks")
-            .upsert(
-                PickRow(circleId: circleId, restaurantId: restaurantId, createdBy: userId),
-                onConflict: "circle_id,picked_date"
-            )
-            .execute()
-    }
-
-    func fetchTodayPick(circleId: UUID) async throws -> UUID? {
-        struct PickRow: Decodable {
-            let restaurantId: UUID
-            enum CodingKeys: String, CodingKey {
-                case restaurantId = "restaurant_id"
-            }
-        }
-        let today = {
-            let f = DateFormatter()
-            f.dateFormat = "yyyy-MM-dd"
-            return f.string(from: Date())
-        }()
-        let rows: [PickRow] = try await client
-            .from("picks")
-            .select("restaurant_id")
-            .eq("circle_id", value: circleId)
-            .eq("picked_date", value: today)
-            .limit(1)
-            .execute()
-            .value
-        return rows.first?.restaurantId
+        let response = try await client.rpc("scout_pick", params: Params(
+            p_circle_id: circleId, p_action: action, p_session_id: sessionId,
+            p_restaurant_id: restaurantId, p_yes: yes, p_window: TimeOfDay.current.rawValue
+        )).execute()
+        return try Self.decoder.decode(SharedPickSession.self, from: response.data)
     }
 
     // MARK: - Visits
