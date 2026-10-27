@@ -1,0 +1,83 @@
+import {PGlite} from '@electric-sql/pglite';
+import {pgcrypto} from '@electric-sql/pglite/contrib/pgcrypto';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {readFile,writeFile} from 'node:fs/promises';
+const db=new PGlite({extensions:{pgcrypto}});
+const ids=Array.from({length:8},(_,i)=>`10000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`);
+const [a,b,c,outsider,circle,other]=ids;
+await db.exec(`create role anon; create role authenticated; create schema auth; create schema extensions;
+create extension pgcrypto with schema extensions;
+create table auth.users(id uuid primary key);
+create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+grant usage on schema public,auth to anon,authenticated;
+create table public.circles(id uuid primary key,name text,short_name text,accent_color text default '#CC5500',created_at timestamptz default now(),created_by uuid);
+create table public.circle_members(circle_id uuid references circles(id),user_id uuid references auth.users(id),initials text,primary key(circle_id,user_id));
+alter table public.circle_members enable row level security;
+create function public.is_circle_member(cid uuid) returns boolean language sql stable security definer set search_path='' as $$
+select exists(select 1 from public.circle_members where circle_id=cid and user_id=auth.uid())$$;
+insert into auth.users values ('${a}'),('${b}'),('${c}'),('${outsider}');
+insert into public.circles(id,name,created_by) values ('${circle}','Our atlas','${a}'),('${other}','Other atlas','${outsider}');
+insert into public.circle_members values ('${circle}','${a}','AA'),('${other}','${outsider}','XX');`);
+await db.exec(await readFile(new URL('../../supabase/migrations/20261027042354_circle_invitations.sql',import.meta.url),'utf8'));
+async function as(user,fn) {return db.transaction(async tx=>{await tx.exec(`set local role authenticated;select set_config('request.jwt.claim.sub','${user}',true)`);return fn(tx);});}
+async function rpc(user,action,cid=null,code=null,id=null,initials='BB') {return as(user,async tx=>(await tx.query('select public.scout_circle_invite($1,$2,$3,$4,$5) as value',[action,cid,code,id,initials])).rows[0].value);}
+async function circles(user) {return as(user,async tx=>(await tx.query('select public.scout_my_circles() as value')).rows[0].value);}
+assert.equal((await rpc(a,'status',circle)).is_active,false);
+await assert.rejects(rpc(outsider,'create',circle),/membership/);
+await assert.rejects(rpc(a,'create',other),/membership/);
+await assert.rejects(rpc('','create',circle),/Sign in/);
+await assert.rejects(rpc(a,'invalid',circle),/Invalid/);
+let invite=await rpc(a,'create',circle);
+assert.match(invite.code,/^[a-f0-9]{32}$/);
+assert.equal(invite.is_active,true);
+assert(Date.parse(invite.expires_at)>Date.now()+6.9*86400000);
+const stored=(await db.query('select * from public.circle_invitations')).rows[0];
+assert.equal(stored.token_hash,createHash('sha256').update(invite.code).digest('hex'));
+assert.notEqual(stored.token_hash,invite.code);
+assert.equal((await rpc(a,'status',circle)).code,null);
+assert.equal((await circles(a)).length,1);
+assert.equal((await circles(b)).length,0);
+let preview=await rpc(b,'preview',null,invite.code.toUpperCase());
+assert.equal(preview.circle_name,'Our atlas');assert.equal(preview.is_member,false);
+assert.equal((await db.query(`select count(*)::int as n from circle_members where circle_id='${circle}'`)).rows[0].n,1);
+const joined=await rpc(b,'join',null,invite.code);
+assert.equal(joined.is_member,true);
+await rpc(b,'join',null,invite.code,null,'FORGED');
+const mine=await circles(b);
+assert.equal(mine[0].circle_members.length,2);assert.equal(mine[0].circle_members.find(m=>m.user_id===b).initials,'BB');
+await assert.rejects(rpc(c,'join',other,invite.code),/invalid, expired/);
+await assert.rejects(rpc(c,'preview',null,'not-a-code'),/invalid, expired/);
+await assert.rejects(rpc(c,'join',null,'f'.repeat(32)),/invalid, expired/);
+await assert.rejects(rpc(a,'create',circle),e=>e.code==='PT409');
+const old=invite;
+invite=await rpc(b,'create',circle,null,invite.id);
+assert.notEqual(invite.code,old.code);assert.notEqual(invite.id,old.id);
+await assert.rejects(rpc(c,'join',null,old.code),/invalid, expired/);
+await assert.rejects(rpc(a,'revoke',circle,null,old.id),e=>e.code==='PT409');
+const inactive=await rpc(b,'revoke',circle,null,invite.id);
+if(process.env.SCOUT_INVITE_FIXTURE)await writeFile(process.env.SCOUT_INVITE_FIXTURE,JSON.stringify({invite,preview,joined,circles:mine,inactive}));
+await rpc(b,'revoke',circle,null,invite.id); // idempotent retry
+await assert.rejects(rpc(c,'preview',null,invite.code),/invalid, expired/);
+assert.equal((await circles(b))[0].id,circle); // revocation does not remove joined members
+invite=await rpc(a,'create',circle);
+await db.exec(`update public.circle_invitations set expires_at=now()-interval '1 second' where circle_id='${circle}'`);
+await assert.rejects(rpc(c,'join',null,invite.code),/invalid, expired/);
+invite=await rpc(a,'create',circle);
+await db.exec(`delete from public.circle_members where circle_id='${circle}' and user_id='${a}'`);
+await assert.rejects(rpc(c,'preview',null,invite.code),/invalid, expired/);
+await assert.rejects(rpc(a,'status',circle),/membership/);
+assert.equal((await circles(a)).length,0); // creator alone is not membership
+invite=await rpc(b,'create',circle);
+await Promise.all([rpc(c,'join',null,invite.code),rpc(c,'join',null,invite.code)]);
+assert.equal((await circles(c))[0].circle_members.length,2);
+await assert.rejects(as(b,tx=>tx.query('select * from public.circle_invitations')),/permission denied/);
+await assert.rejects(as(b,tx=>tx.query(`insert into public.circle_members values ('${other}','${b}','BB')`)),/permission denied|row-level security/);
+await assert.rejects(db.exec(`set role anon; select public.scout_circle_invite('preview',p_code=>'${invite.code}')`),/permission denied/);
+await db.exec('reset role');
+await assert.rejects(db.exec('set role anon; select public.scout_my_circles()'),/permission denied/);
+await db.exec('reset role');
+const audit=(await db.query("select prosecdef,proconfig from pg_proc where proname='scout_circle_invite'")).rows[0];
+assert.equal(audit.prosecdef,false);assert(audit.proconfig.includes('search_path=""'));
+console.log('PASS hash-only storage, member-only management, auth/anonymous denial, preview without joining, real avatars, idempotent joins, 7-day expiry, replacement/revocation, stale conflicts, creator removal, wrong-circle/forged writes, and private RPC permissions');
+await db.close();

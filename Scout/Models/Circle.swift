@@ -76,4 +76,17 @@ struct CircleMember: Codable, Hashable {
         case userId   = "user_id"
         case initials
     }
+
+    init(circleId: UUID, userId: UUID, initials: String) {
+        self.circleId = circleId
+        self.userId = userId
+        self.initials = initials
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        circleId = try container.decode(UUID.self, forKey: .circleId)
+        userId = try container.decode(UUID.self, forKey: .userId)
+        initials = try container.decodeIfPresent(String.self, forKey: .initials) ?? "?"
+    }
 }

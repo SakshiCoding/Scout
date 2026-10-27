@@ -156,3 +156,51 @@ Release walkthrough:
 - Launch while signed out: the sign-in screen should show the same compass, with the existing Scout heading and layout. Auth loading uses a smaller version. VoiceOver should announce the heading without a duplicate decorative image label.
 - Check dark and tinted Home Screen appearances on a device. The dark glyph should appear over the system background; tinted should remain legible under the chosen tint. The contact sheet previews the grayscale source rather than any user tint.
 - Verify widget and Shortcuts discovery still work, and run normal archive/App Store validation before distribution. Simulator checks do not verify physical-device appearance, provisioning, or App Store acceptance.
+
+
+## Circle invitations
+
+```sh
+npm ci --prefix Tests/database --ignore-scripts
+Tests/run-invitation-tests.sh
+```
+
+The harness applies `20261027042354_circle_invitations.sql` to isolated PGlite with the real pgcrypto extension, separate auth identities, and RLS on membership data. It checks member-only management, anonymous/forged-write denial, hash-only storage, preview without joining, idempotent acceptance, real member snapshots, seven-day expiry, wrong-circle requests, rotation/revocation, removed creators, stale HTTP conflict codes, and legacy-owner-without-membership isolation. Swift then validates links and decodes actual SQL responses using production models. No API keys, production records, or service-role credentials are needed.
+
+The migration is deployed to Scout (`vdhhsxgirkjalysejycw`). Hosted Auth/PostgREST verification passed with three disposable users: concurrent duplicate acceptance, authoritative memberships, denied cross-circle writes, immediate HTTP 409 conflicts, rotation/revocation, and shared-picker participant invalidation after joining. Production Swift models also decoded the hosted JSON response.
+
+To repeat hosted checks, create two disposable circles and three confirmed email accounts. Account A must be the only member of the main circle (with at least one unvisited restaurant); account B must be outside it; account C owns the unrelated circle and is outside the main circle. Store this private JSON configuration outside the repository:
+
+```json
+{
+  "disposable": true,
+  "url": "https://PROJECT.supabase.co",
+  "anonKey": "PUBLIC_CLIENT_KEY",
+  "circleId": "MAIN_CIRCLE_UUID",
+  "otherCircleId": "UNRELATED_CIRCLE_UUID",
+  "accounts": [
+    {"userId":"A_UUID","email":"A_EMAIL","password":"PASSWORD"},
+    {"userId":"B_UUID","email":"B_EMAIL","password":"PASSWORD"},
+    {"userId":"C_UUID","email":"C_EMAIL","password":"PASSWORD"}
+  ]
+}
+```
+
+```sh
+SCOUT_INVITATION_TEST_CONFIG=/private/path/invitation-test.json node Tests/database/hosted-circle-invitations.test.mjs
+```
+
+Use Node 22 or newer and the public client key. This opt-in harness joins B to the supplied main circle and mutates its invitation/pick round. It revokes its last invite on completion unless `SCOUT_INVITE_UI_CODE` points to a private export file for a subsequent UI walkthrough. `SCOUT_INVITE_FIXTURE` optionally exports a private JSON snapshot for Swift decoding. Remove disposable circles/memberships/accounts/sessions and private files after testing.
+
+Simulator verification on October 26, 2026 passed the cold link → sign-in → preview → explicit Join → joined wishlist flow, restart persistence, real three-member avatars, invitation replacement, native share preview without sending, revocation, recoverable refresh, and revoked/malformed code errors. Database checks confirmed preview did not join, explicit confirmation did join, and the resulting shared picker had three participants with zero votes/matches. All local regressions and the signed Simulator build passed. Disposable hosted users/sessions/circles/restaurants/invitations/picks and the QA Simulator were removed afterward.
+
+Device walkthrough:
+
+1. Open the circle switcher, select Invite to the active circle, create a link, and verify the sharing/code and expiry controls. Reopen the sheet: it should explain that a replacement is needed to share a link again. Replace it and verify the old code fails; revoke it and verify further joins fail.
+2. On an installed, signed-out Scout, open `scout://join?code=...`. Sign in; the pending preview should show the invited circle, but no membership should exist yet. Tap Join circle: switch to the joined wishlist with actual member avatars. Restart to verify persistence.
+3. Use Join a circle in the switcher or the first-circle empty state to paste a link/code. Malformed, expired, and revoked codes should show a usable error without changing membership. Existing members see Open circle.
+4. Repeat acceptance/concurrent requests, and confirm there is only one membership. Losing the response must never optimistically invent a successful join. Restore connectivity and retry.
+5. Open Pick before and after a join: the next sync must regenerate its participant snapshot, and all current members must vote yes before a match. Inviting alone must not cast any vote.
+6. Verify share-import review and password recovery still have their dedicated routes. A new valid invite opened during sign-in must remain pending; auth changes or late circle-list responses must not overwrite a confirmed join.
+
+Physical-device link sharing between apps and simultaneous UI use remain release checks. Custom-scheme links require Scout to be installed; this feature does not host a web landing page or install flow.

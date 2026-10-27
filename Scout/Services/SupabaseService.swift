@@ -172,7 +172,7 @@ final class SupabaseService {
         _ = userId
 
         let response: [ScoutCircle] = try await client
-            .rpc("get_my_circles")
+            .rpc("scout_my_circles")
             .execute()
             .value
         return response

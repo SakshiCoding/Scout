@@ -2,13 +2,15 @@
 
 > **Standing rule:** After implementing any feature, always update CLAUDE.md and AGENTS.md to reflect what was built — file table, UI screens table, Phase checklist. This is automatic, not optional, and does not need to be prompted by the user each time.
 
+> **Feature delivery workflow:** Every request for a new feature includes implementation, testing, opening a pull request, and merging it once verification passes and merging is available. Do this automatically without another prompt. If verification or merging is blocked, report the blocker and leave the PR open.
+
 Scout is a shared restaurant wishlist iOS app organized around **circles** — named groups (couples, families, roommates, travel crews) each with their own wishlist, map, swipe picker, and photo journal. Built with SwiftUI + Supabase + Google Maps SDK for iOS + CoreLocation + Google Places SDK for iOS + Google Gemini API.
 
 ---
 
 ## Current State
 
-The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, server-authoritative circle matching (deployed to Scout), Siri/App Shortcuts navigation, and Atlas app icons/shared branding assets are implemented.
+The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, server-authoritative circle matching (deployed to Scout), Siri/App Shortcuts navigation, Atlas app icons/shared branding assets, and secure circle invitations are implemented.
 
 | File | Status |
 |------|--------|
@@ -16,19 +18,24 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Intents/ScoutShortcuts.swift` | Three foreground Siri/App Shortcuts: open wishlist, open shared picker, and open journal; routes through the existing AppState/auth gate |
 | `Scout/Models/ScoutDestination.swift` + `Scout/AppState/AppState+Navigation.swift` | Shared typed destinations/tab enum and navigation for shortcuts and `scout://wishlist`, `scout://pick`, `scout://journal` links |
 | `Scout/Models/WishlistFilter.swift` | Existing wishlist tab/filter types, moved unchanged from AppState for reuse and credential-free navigation tests |
-| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, Google Place detail refreshes, shared import state/debug fixtures, shared pick state (`pickSession`, `observePickSession`, `sendPickAction`, derived `activePickMatch`), scoped Realtime observation, and stale-response guards, widget snapshot publishing, sign-out cleanup, and wishlist widget links |
-| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; persists Google Place IDs, includes journal reads, private storage downloads, and the checked `sharedPick` RPC for shared decks, votes, undo, rematches, and authoritative matches |
+| `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, Google Place detail refreshes, shared import state/debug fixtures, shared pick state (`pickSession`, `observePickSession`, `sendPickAction`, derived `activePickMatch`), scoped Realtime observation, and stale-response guards, widget snapshot publishing, sign-out cleanup, wishlist widget links, pending invitation handoff, circle-load request guards, and joined-circle count refresh |
+| `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; persists Google Place IDs, includes journal reads, private storage downloads, nested member snapshots via `scout_my_circles`, and the checked `sharedPick` RPC for shared decks, votes, undo, rematches, and authoritative matches |
+| `Scout/Models/CircleInvitation.swift` | Strict invitation code/link parser and management/preview response models; CircleMember decoding preserves legacy members with null initials using a placeholder |
+| `Scout/Services/SupabaseService+Invitations.swift` + `Scout/AppState/AppState+Invitations.swift` | Checked invitation RPCs and acknowledged join flow; refresh authoritative circle/member snapshots, switch to the joined wishlist, and reject stale auth/circle-load responses |
+| `Scout/Views/Circles/InviteCircleSheet.swift` + `Scout/Views/Circles/JoinCircleSheet.swift` | Create/share/copy/replace/revoke seven-day invites; paste/check/confirm joining, including links opened before sign-in |
+| `Tests/run-invitation-tests.sh` + `Tests/database/hosted-circle-invitations.test.mjs` | Real migration/pgcrypto permission and lifecycle tests, Swift parser/SQL decoding tests, and opt-in hosted Auth/PostgREST/concurrency integration checks |
 | `Scout/Services/AuthService.swift` | Auth session handling, email/Apple sign-in, password-reset email requests, recovery callback sessions, and password updates |
 | `Scout/Services/LocationService.swift` | Location permissions, tap-triggered current-location requests, immediate post-authorization location refresh, and distance sorting |
 | `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results, enrichment hints (expanded cuisine mapping: 25 types including Seafood, Steakhouse, BBQ, Spanish, Middle Eastern, Brazilian, Indonesian, Lebanese, Turkish; vibe hints from fine dining, fast food, brunch, sports bar types), and Google website/phone contact details |
 | `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Services/GeminiService.swift` | Google Gemini API client foundation for structured restaurant extraction from shared TikTok/Instagram/social text; reads `GEMINI_API_KEY`/`GEMINI_MODEL`, requests JSON output, normalizes restaurant name, city/neighborhood, cuisine, establishment type, price tier, vibe tags, note, and confidence; includes conservative name/address-based cuisine and canonical vibe suggestions with confidence gating |
+| `Scout/Views/Shared/AtlasPrimaryButtonStyle.swift` | Atlas 52pt pill button style with shared typography, disabled state, and pressed feedback for invitation CTAs |
 | `Scout/Views/Shared/ScoutBrandMark.swift` | Shared decorative vector compass/fork mark used by sign-in, first-circle, and auth-loading screens; Atlas tint and existing layout preserved |
 | `Scout/Assets.xcassets/` + `Branding/` | iOS light/dark/tinted app icons, vector compass PDF/SVG, Atlas accent color, preview contact sheet, and branding/regeneration guide |
 | `Scripts/generate-brand-assets.swift` + `Tests/validate-brand-assets.swift` | Native Core Graphics asset generation and checks for icon slots, dimensions, transparency, exact sRGB palette, grayscale tint, vector configuration, and compiled bundle icon packaging |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Models/SharedRestaurantImport.swift` | Shared app/extension import payload + App Group storage for pending restaurant/social shares |
-| `Scout/Views/Root/RootView.swift` | Auth gate, custom tab shell, shared import sheet host, debug-only social import test button, and shortcut-driven list/journal navigation reset, and a shared Atlas compass on the loading screen |
+| `Scout/Views/Root/RootView.swift` | Auth gate, custom tab shell, shared import sheet host, debug-only social import test button, and shortcut-driven list/journal navigation reset, a shared Atlas compass on the loading screen, and a shared incoming-sheet host for auth-gated invitation/import review |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping, password-reset email action, and shared Atlas compass brand mark |
 | `Scout/Views/Auth/ResetPasswordView.swift` | Recovery-link destination for choosing and saving a new password |
@@ -41,7 +48,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Journal/` | Journal index, per-restaurant scrapbook, full composer, fullscreen viewer, and cross-post sheet with real visit/media loading, cached photo/video thumbnails, editable metadata, attachments, swipe paging, video playback, sharing, deletion, and moving accidentally visited places back to the wishlist |
 | `Scout/Views/Pick/PickerView.swift` | Swipe pick tab backed by a server-owned deck and real circle-member votes; acknowledged progress, per-member status, waiting/no-match states, undo, shared rematch, and persistent match reveal; foreground Realtime updates plus five-second refresh fallback |
 | `Scout/Views/Pick/MatchView.swift` | Match reveal screen: animated heading + restaurant card + member avatars + "Let's go!" (`onConfirm`) / "Pick again" (`onPickAgain`) two-callback CTAs |
-| `Scout/Views/Circles/` | Circle switcher pill, picker sheet, and new circle sheet |
+| `Scout/Views/Circles/` | Circle switcher/picker with refreshed real member lists, new circle, invite management, and join sheets; first-circle and solo-picker entry points |
 | `Scout/Views/Shared/` | Shared small UI components and Atlas icons |
 | `ScoutShareExtension/` | Share Extension target: captures URL/text from Safari, Apple Maps, Google Maps, TikTok, Instagram, and other social links; supports Apple Maps MapKit place payloads; safely parses place hints/coordinates from shared links and text, expands Google Maps short links when possible, applies first-pass social caption cleanup, writes a pending import through the App Group, and opens Scout |
 | `Scout/Models/` | Circle, restaurant, visit, and media models |
@@ -198,12 +205,13 @@ Scout/
 
 ## Supabase Schema (tables)
 
-`profiles` · `circles` · `circle_members` · `restaurants` · `visits` · `media` · `picks` (legacy) · `pick_sessions` · `pick_votes`
+`profiles` · `circles` · `circle_members` · `restaurants` · `visits` · `media` · `picks` (legacy) · `pick_sessions` · `pick_votes` · `circle_invitations`
 
 The schema lives in `supabase/migrations/`. Current circle and restaurant creation/loading use Supabase RPC functions to avoid client-side RLS timing issues:
 
 - `create_circle`
-- `get_my_circles`
+- `scout_my_circles` (nested real membership snapshots; legacy `get_my_circles` retained for older apps)
+- `scout_circle_invite` (status/create/revoke/preview/join)
 - `add_restaurant`
 - `get_circle_restaurants`
 - `add_visit`
@@ -224,11 +232,11 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
-| 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; add flow uses Google Places search and persists Place IDs when configured; Gemini fills cuisine/vibe gaps for generic results, with editable suggestions and a manual name-based action |
+| 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; add flow uses Google Places search and persists Place IDs when configured; Gemini fills cuisine/vibe gaps for generic results, with editable suggestions and a manual name-based action; the first-circle empty state also offers Join a circle |
 | 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, OpenTable/Resy search links, and Google website/phone actions when available |
 | 3 | `PickerView` + `MatchView` | Pick | Implemented / hosted verified | All members share one server-created deck of up to three places. A match requires yes from every round participant (minimum two); actual member progress syncs via Realtime with polling recovery. Votes/matches resume on reopen; undo is allowed before a match; shared rematches are serialized. No simulated partner or UserDefaults match fallback. |
 | 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, tap-triggered user location, and filter wiring |
-| 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
+| 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch circles, view refreshed member avatars, invite to the active circle, or join another |
 | 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
 | 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, destructive entry deletion, and moving a place back to the wishlist |
 | 8 | `JournalComposeView` | — | Implemented | Full-screen new entry flow: editable date, occasion, note, vibe chips, removable photo/video attachments, and save |
@@ -240,6 +248,8 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 14 | `ScoutWidgetView` | Home Screen | Implemented | Small widget shows the newest saved place; medium shows up to three, with active circle and total wishlist count; handles sign-in/no-circle/empty/stale states and opens the existing List tab |
 | 15 | `ScoutShortcuts` | Siri / Shortcuts | Implemented | Three discoverable actions open the existing wishlist, Pick, or journal index; wishlist resets filters, journal resets its navigation stack, and signed-out launches keep the sign-in gate |
 | 16 | `ScoutBrandMark` + app icon | Auth / Home Screen | Implemented | Atlas compass with fork motif replaces the placeholder S on sign-in/first-circle/loading; light, dark, and tinted iOS icons use the same geometry |
+| 17 | `InviteCircleSheet` | — | Implemented / hosted verified | Members create a seven-day link/code, share or copy it, replace the active link, and revoke future joins |
+| 18 | `JoinCircleSheet` | — | Implemented / hosted verified | Paste a code/link or continue after auth from a deep link, preview the circle, explicitly confirm joining, then open its wishlist |
 
 ### Key layout rules across all screens
 
@@ -306,11 +316,26 @@ Phase 1 verified behavior:
 - [x] ScoutWidget (WidgetKit: small/medium active-circle wishlist, shared App Group snapshot, change-driven reloads, sign-out cleanup, 24-hour stale state, and wishlist deep link)
 - [x] Siri Shortcuts (App Intents: open active-circle wishlist, shared picker, and journal; foreground/auth-gated navigation with no automatic votes or writes)
 - [x] App icon + branding assets (Atlas compass/fork, light/dark/tinted iOS icons, shared vector sign-in/first-circle/loading mark, exact sRGB accent, portable SVG and regeneration guide)
+- [x] Circle invitations (member-managed seven-day link/code, hash-only storage, auth-gated preview and explicit join, replacement/revocation, real member snapshots, and shared-picker participant refresh)
 - [ ] Performance + polish pass
 
 Name-based suggestions require `GEMINI_API_KEY` in the ignored `Scout/Config.xcconfig` (existing `GEMINI_MODEL` setting is reused). They fill only empty cuisine and add canonical vibes; specific Places cuisine and user choices take precedence. No key hides the suggestion control. Unknown businesses, low confidence, and API errors leave the form usable, and Save never waits for suggestions. Suggestions apply only in the add form; bulk import and existing saved restaurants are unchanged.
 
 Verification: `Tests/run-metadata-tests.sh` exercises the production service with mocked URLSession responses (request schema/address context, canonical tags, low confidence, generic metadata, missing key, cancellation, HTTP/malformed-response errors, and social-parser regression). The harness needs no API key or Supabase access. UI walkthrough checks are documented in `Tests/README.md`.
+
+---
+
+### Circle invitations — behavior and deployment
+
+Migration `20261027042354_circle_invitations.sql` adds one invitation row per circle and the authenticated `scout_circle_invite` / `scout_my_circles` RPCs. The hosted Scout project has this migration deployed. The old `get_my_circles` RPC remains for older binaries; the current app fetches nested member initials/IDs in one circle-list request. Circle visibility in the new RPC requires actual membership.
+
+Any current member can create/replace or revoke the circle's invitation. The server generates a 128-bit random code, stores only its SHA-256 hash, and expires it after seven days. The raw code is returned once and held only by the open invite sheet; reopening requires creating a replacement to share again. Replacement/revocation blocks future joins without removing existing members. Invitations also stop working when their creator is no longer a member. Expected invitation IDs reject stale management actions with HTTP 409.
+
+Recipients open `scout://join?code=...` or paste a code/link into Join a circle. The app must be installed; there is no website/App Store fallback. A signed-out deep link stays in AppState memory through sign-in. The authenticated preview discloses only the invited circle name/ID, expiry, and the caller's membership state; it never joins automatically. Explicit Join writes only `auth.uid()` with an idempotent membership insert, refreshes real circle/member data, and opens the joined wishlist. Circle load request guards reject responses started before a confirmed join; later invitation payloads are not cleared by an earlier join. The RootView incoming-sheet host retains import/password-recovery priority.
+
+The invitation table has RLS, an explicit deny policy, and no client table grants. Public RPCs are security invoker with authenticated-only execution, delegating to checked functions in the non-exposed `scout_private` schema with an empty search path. Management and acceptance serialize on the shared pick circle lock; a joined member invalidates the old picker participant snapshot on its next sync. No token is stored in widget snapshots, App Groups, or UserDefaults. Native Share opens a user-controlled share sheet; Scout does not send messages automatically.
+
+`Tests/run-invitation-tests.sh` applies the production migration with real pgcrypto in isolated PGlite, verifies auth/forged-write isolation, hash-only storage, preview/acceptance, nested memberships, expiry, replacement/revocation, removed creators, stale conflicts, and duplicate acceptance, then decodes its responses with production Swift models. Hosted Auth/PostgREST tests verify independent/concurrent member joins and shared-picker invalidation. A signed iOS 26.4 Simulator walkthrough verified cold invite links across sign-in, preview without membership, explicit joining, restored circle/member avatars after restart, member-created replacement links, native Share preview (no messages sent), revoke/refresh recovery, and revoked/malformed code feedback. All existing regressions passed; disposable hosted fixtures and the QA Simulator were removed afterward. See `Tests/README.md` for the opt-in harness and device walkthrough.
 
 ---
 
