@@ -191,6 +191,9 @@ Four tabs with line-drawn icons (1.6pt stroke, burnt orange when active, subdued
 
 ### Screen 2 — Restaurant Detail
 
+Implemented hours slice: the detail screen now has an attributed regular-weekly-hours card, checked status/date, and refresh/retry/fallback states. The SDK's localized day strings remain in source order, so today's row and exact closing time are not inferred from their array indices. Hero photos and the other unimplemented elements below remain design targets.
+
+
 **Purpose:** Full info card for a saved restaurant.
 
 **Layout (top → bottom):**
