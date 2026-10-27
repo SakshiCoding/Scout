@@ -8,7 +8,10 @@ import Supabase
 final class AppState {
     // MARK: - Auth
     var currentUser: User?
-    var isAuthenticated = false { didSet { if !isAuthenticated { resetPickState() }; publishWidgetSnapshot() } }
+    var isAuthenticated = false { didSet {
+        if !isAuthenticated { resetPickState(); invalidateRestaurantLoads() }
+        publishWidgetSnapshot()
+    } }
     var isLoadingAuth   = true
     var isPasswordRecovery = false
     var passwordRecoveryError: String?
@@ -17,12 +20,20 @@ final class AppState {
     var circles: [ScoutCircle] = []
     private var circleLoadRequestId = UUID()
     var activeCircle: ScoutCircle? { didSet {
-        if oldValue?.id != activeCircle?.id { resetPickState() }
+        if oldValue?.id != activeCircle?.id {
+            resetPickState()
+            invalidateRestaurantLoads()
+        }
         publishWidgetSnapshot()
     } }
 
     // MARK: - Restaurants
-    var restaurants: [Restaurant] = [] { didSet { publishWidgetSnapshot() } }
+    var restaurants: [Restaurant] = [] { didSet {
+        restaurantsRevision += 1
+        publishWidgetSnapshot()
+    } }
+    var restaurantsRevision: UInt64 = 0
+    var restaurantLoadRequestId = UUID()
     var isLoadingRestaurants = false
 
     // MARK: - Journal
@@ -195,27 +206,6 @@ final class AppState {
     }
 
     func invalidateCircleLoads() { circleLoadRequestId = UUID() }
-
-    func loadRestaurants() async {
-        guard let circleId = activeCircle?.id else { return }
-        isLoadingRestaurants = true
-        defer {
-            if activeCircle?.id == circleId { isLoadingRestaurants = false }
-        }
-        do {
-            let fetched = try await supabase.fetchRestaurants(circleId: circleId)
-            let enriched = await places.enrichGoogleRestaurants(fetched)
-            guard isAuthenticated, activeCircle?.id == circleId else { return }
-            restaurants = enriched
-            if let index = circles.firstIndex(where: { $0.id == circleId }) {
-                circles[index].restaurantCount = enriched.filter { $0.status == .wantToTry }.count
-                circles[index].visitedCount = enriched.filter { $0.status == .visited }.count
-            }
-        } catch {
-            guard isAuthenticated, activeCircle?.id == circleId else { return }
-            restaurants = []
-        }
-    }
 
     func loadJournal() async {
         guard let circleId = activeCircle?.id else { return }
