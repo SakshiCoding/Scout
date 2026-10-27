@@ -126,15 +126,7 @@ struct RootView: View {
         ZStack {
             Atlas.paper.ignoresSafeArea()
             VStack(spacing: 16) {
-                // Compass-inspired mark
-                ZStack {
-                    Circle()
-                        .stroke(Atlas.burnt.opacity(0.2), lineWidth: 1)
-                        .frame(width: 48, height: 48)
-                    Text("S")
-                        .font(Atlas.Font.serif(28))
-                        .foregroundColor(Atlas.burnt)
-                }
+                ScoutBrandMark(size: 48)
                 Text("Scout")
                     .font(Atlas.Font.serif(20))
                     .foregroundColor(Atlas.ink2)

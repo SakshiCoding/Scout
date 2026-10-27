@@ -11,13 +11,11 @@ always decide where to go — fast.
 *"Find your next favorite."*
 
 ## Visual Identity
-- **Colors:** Burnt orange, orange, white
-- **Typography:** Clean sans-serif, lots of whitespace
+- **Colors:** Atlas paper `#F7F1E6`, burnt orange `#CC5500`, ink `#1B1612`
+- **Typography:** DM Serif Display headings/wordmark, DM Sans UI, generous whitespace
 - **Motifs:** Compass, map pins, the letter S
-- **Icon concepts:**
-  - A compass rose with a fork as one of the needles
-  - A minimalist map pin shaped like an "S"
-  - A scout/binoculars silhouette
+- **Mark:** Atlas compass rose with a fork as its north needle, an inner diamond, and cardinal rays. Light, dark, and tinted iOS icons share this geometry.
+- **Brand assets:** See [`Branding/README.md`](../Branding/README.md) for the SVG/PDF mark, app icons, palette, preview, and native regeneration workflow.
 
 ---
 

@@ -143,7 +143,7 @@ Backend note: Supabase migrations live in `supabase/migrations/`. Circle and res
 - [ ] TikTok link stored on card
 - [ ] ScoutWidget (WidgetKit)
 - [x] Siri Shortcuts — open wishlist, shared picker, and journal using foreground App Intents
-- [ ] App icon + branding assets
+- [x] App icon + branding assets — Atlas compass/fork, light/dark/tinted iOS icons, shared vector mark
 - [ ] Performance + polish pass
 
 ---

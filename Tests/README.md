@@ -137,3 +137,22 @@ Physical-device walkthrough:
 5. Run Pick a restaurant with two members and verify it only opens the shared round; it must not submit a vote, declare a match, or reset an existing round.
 6. Try “Open my wishlist in Scout,” “Pick a restaurant in Scout,” and “Open my journal in Scout” with Siri on a physical device. Speech recognition, Siri language/settings, and indexing are system-controlled and are not verified by the command-line harness.
 7. Confirm the widget's `scout://wishlist`, share extension's import handoff, and password-reset callback continue to work. `scout://pick` and `scout://journal` are additional navigation links.
+
+
+## Atlas app icon and branding
+
+```sh
+swift Tests/validate-brand-assets.swift
+swift Tests/validate-brand-assets.swift /tmp/scout-derived/Build/Products/Debug-iphonesimulator/Scout.app
+```
+
+The source checks cover all three iOS appearance slots, 1024px dimensions, opaque light/tinted PNGs, transparent dark background, exact sRGB Atlas paper/burnt-orange samples, grayscale tinted input, and vector PDF/template configuration. The optional bundle path checks compiled icon metadata and renditions. Regenerate assets together with `swift Scripts/generate-brand-assets.swift`; see `Branding/README.md` for the editable geometry and preview.
+
+Simulator verification completed October 26, 2026: signed Debug build, source/compiled icon checks, default/dark/tinted Home Screen appearances on a fresh iOS 26.4 Simulator, and the sign-in compass rendered correctly. Its accessibility tree contains the Scout heading without a duplicate decorative mark. The disposable Simulator was removed after testing. Existing shortcut and widget regression harnesses passed. No hosted data or credentials were changed.
+
+Release walkthrough:
+
+- Install Scout and confirm its compass/fork icon replaces the blank placeholder on the Home Screen and in system app surfaces.
+- Launch while signed out: the sign-in screen should show the same compass, with the existing Scout heading and layout. Auth loading uses a smaller version. VoiceOver should announce the heading without a duplicate decorative image label.
+- Check dark and tinted Home Screen appearances on a device. The dark glyph should appear over the system background; tinted should remain legible under the chosen tint. The contact sheet previews the grayscale source rather than any user tint.
+- Verify widget and Shortcuts discovery still work, and run normal archive/App Store validation before distribution. Simulator checks do not verify physical-device appearance, provisioning, or App Store acceptance.
