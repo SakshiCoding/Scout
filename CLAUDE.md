@@ -27,6 +27,8 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Services/AuthService.swift` | Auth session handling, email/Apple sign-in, password-reset email requests, recovery callback sessions, and password updates |
 | `Scout/Services/LocationService.swift` | Location permissions, tap-triggered current-location requests, immediate post-authorization location refresh, and distance sorting |
 | `Scout/AppState/AppState+RestaurantLoading.swift` + `Scout/Services/RestaurantEnrichment.swift` | Saved restaurants publish before optional Places refresh; at most three detail requests per refresh run concurrently, preserving order/fallbacks. Request/user/circle/revision guards protect local changes and reject stale responses; scope changes clear the previous circle and stop scheduling old refresh work. |
+| `Scout/Services/MediaService.swift` + `MediaThumbnailStore.swift` + `MediaThumbnailRenderer.swift` | Shared private-media thumbnails: 512px photo downsampling with EXIF orientation, size-limited rotated video posters, detached decoding, duplicate-load coalescing, 32MB advisory decoded cache budget/128-item limit, deletion invalidation, and sign-out cleanup; original-media sharing is preserved |
+| `Tests/run-media-thumbnail-tests.sh` + `Tests/MediaThumbnailTests.swift` | Credential-free macOS and iOS Simulator tests using real ImageIO/AVFoundation photo/video fixtures plus deferred downloads for cache, coalescing, retry, cancellation, deletion, and sign-out races |
 | `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results, enrichment hints (expanded cuisine mapping: 25 types including Seafood, Steakhouse, BBQ, Spanish, Middle Eastern, Brazilian, Indonesian, Lebanese, Turkish; vibe hints from fine dining, fast food, brunch, sports bar types), and Google website/phone contact details |
 | `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Services/GeminiService.swift` | Google Gemini API client foundation for structured restaurant extraction from shared TikTok/Instagram/social text; reads `GEMINI_API_KEY`/`GEMINI_MODEL`, requests JSON output, normalizes restaurant name, city/neighborhood, cuisine, establishment type, price tier, vibe tags, note, and confidence; includes conservative name/address-based cuisine and canonical vibe suggestions with confidence gating |
@@ -239,10 +241,10 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 3 | `PickerView` + `MatchView` | Pick | Implemented / hosted verified | All members share one server-created deck of up to three places. A match requires yes from every round participant (minimum two); actual member progress syncs via Realtime with polling recovery. Votes/matches resume on reopen; undo is allowed before a match; shared rematches are serialized. No simulated partner or UserDefaults match fallback. |
 | 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, tap-triggered user location, and filter wiring; saved pins appear before bounded Places detail refresh |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch circles, view refreshed member avatars, invite to the active circle, or join another |
-| 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
-| 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, destructive entry deletion, and moving a place back to the wishlist |
+| 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, memory-conscious thumbnails, and blank-polaroid empty state |
+| 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters with downsampled shared thumbnails, notes, empty state, compose action, destructive entry deletion, and moving a place back to the wishlist |
 | 8 | `JournalComposeView` | — | Implemented | Full-screen new entry flow: editable date, occasion, note, vibe chips, removable photo/video attachments, and save |
-| 9 | `JournalViewerView` | — | Implemented | Fullscreen dark photo/video viewer with swipe paging, page dots, caption block, cached thumbnail strip, close/share/overflow controls, deletion, and native video playback |
+| 9 | `JournalViewerView` | — | Implemented | Fullscreen dark photo/video viewer with swipe paging, page dots, caption block, shared downsampled thumbnail strip, close/share/overflow controls, deletion, and native video playback |
 | 10 | `MarkVisitedSheet` | — | Implemented | Auto-prompted after "Mark as visited" — rating, photos, and visit note; "Save to journal" creates a Visit record and uploads photos, "Skip for now" marks visited only |
 | 11 | `CrossPostSheet` | — | Implemented | Copy a journal photo/video into another circle's matching restaurant journal or share externally through iOS |
 | 12 | `ImportReviewView` | — | Implemented | Main-app review sheet launched from the Share Extension or debug simulator test hook; confirms Safari/Apple Maps/Google Maps/TikTok/Instagram imports, uses Gemini to prefill social restaurant hints, chooses circle, matches Google/Apple Places results, keeps manual name edits, and saves to wishlist even when no exact match is found |
@@ -303,7 +305,7 @@ Phase 1 verified behavior:
 - [x] JournalViewerView (fullscreen photo/video viewer with swipe paging, captions, thumbnails, and native video playback)
 - [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)
 - [x] PickerView + MatchView (server-authoritative shared round, real circle-member votes/progress, unanimous matching, undo/rematch, Realtime plus polling recovery, and revision guards; deployed and verified against hosted Scout)
-- [x] MediaService (cached photo/video thumbnails, external-share file preparation, and direct camera photo capture)
+- [x] MediaService (downsampled photo/video thumbnails, shared in-flight loads, advisory memory budget, deletion/sign-out invalidation, original external-share file preparation, and direct camera photo capture)
 - [x] Reservation deep links (OpenTable/Resy search links plus Google website/phone actions when available)
 
 ### Phase 3 — Polish & Platform
@@ -320,11 +322,22 @@ Phase 1 verified behavior:
 - [x] App icon + branding assets (Atlas compass/fork, light/dark/tinted iOS icons, shared vector sign-in/first-circle/loading mark, exact sRGB accent, portable SVG and regeneration guide)
 - [x] Circle invitations (member-managed seven-day link/code, hash-only storage, auth-gated preview and explicit join, replacement/revocation, real member snapshots, and shared-picker participant refresh)
 - [x] Wishlist loading performance slice (saved rows before Places, three-request concurrency limit, stable fallback/order, edit-safe merges, circle/auth/cancellation guards, and refresh-failure preservation)
-- [ ] Remaining performance + polish pass (physical-device profiling, large media journals, and release walkthrough)
+- [x] Journal thumbnail performance slice (512px oriented previews, detached decoding, shared downloads, advisory cache budget, cancellation/deletion/sign-out guards, real macOS/iOS codec tests)
+- [ ] Remaining performance + polish pass (physical-device profiling, large-journal device walkthrough, and release checks)
 
 Name-based suggestions require `GEMINI_API_KEY` in the ignored `Scout/Config.xcconfig` (existing `GEMINI_MODEL` setting is reused). They fill only empty cuisine and add canonical vibes; specific Places cuisine and user choices take precedence. No key hides the suggestion control. Unknown businesses, low confidence, and API errors leave the form usable, and Save never waits for suggestions. Suggestions apply only in the add form; bulk import and existing saved restaurants are unchanged.
 
 Verification: `Tests/run-metadata-tests.sh` exercises the production service with mocked URLSession responses (request schema/address context, canonical tags, low confidence, generic metadata, missing key, cancellation, HTTP/malformed-response errors, and social-parser regression). The harness needs no API key or Supabase access. UI walkthrough checks are documented in `Tests/README.md`.
+
+---
+
+### Journal thumbnail performance
+
+All journal thumbnail surfaces (index, scrapbook polaroids, viewer strip, and cross-post preview) use one `MediaThumbnailStore` through the existing `AppState.mediaService`. ImageIO creates oriented photo previews with a 512px longest edge instead of retaining full-resolution photos for small views; AVFoundation creates size-limited video posters with preferred track rotation. Downloaded originals are still required, so this improves decoding/cache memory without promising lower network transfer sizes. The fullscreen viewer and external sharing continue using original media.
+
+Decoding and video temporary-file work run in a detached utility task. Duplicate storage-path requests share one download/decode; cancelling a view discards its result while another view can still finish the same load. NSCache uses actual decoded byte costs with a 32MB advisory budget and 128-entry limit; these are eviction hints, not a hard cap on process memory. Deleting media invalidates its cached/in-flight preview. Sign-out clears previews, cancels pending work, and advances a generation so late old-session results cannot repopulate the cache or displace a new request. No new persistent thumbnail cache is added; temporary video files are removed after generation.
+
+`Tests/run-media-thumbnail-tests.sh` exercises production ImageIO/AVFoundation/store code with a 12MP rotated JPEG, small transparent PNG, rotated synthetic video, corrupt input, deferred downloads, cache hits, concurrent callers, retry, and cancellation/clear/delete/replacement races. The same harness runs on iOS Simulator and checks UIKit image wrapping. A signed Simulator app build checks integration. Synthetic codec/cache checks do not replace profiling large journals on a physical device.
 
 ---
 

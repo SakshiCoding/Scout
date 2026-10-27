@@ -497,7 +497,9 @@ struct JournalMediaThumbnail: View {
         .task(id: media?.id) {
             image = nil
             guard let media else { return }
-            image = await appState.mediaService.thumbnail(for: media, supabase: appState.supabase)
+            let loaded = await appState.mediaService.thumbnail(for: media, supabase: appState.supabase)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }

@@ -216,3 +216,24 @@ Tests/run-restaurant-loading-tests.sh
 It compiles the production AppState loading extension, bounded enrichment scheduler, and restaurant model with deferred database/Places fixtures. Tests hold all Places responses to prove saved rows and circle counts publish first; finish details out of order to verify a maximum of three requests, stable ordering, manual-place skips, and failure fallbacks; then exercise edits, visit status/notes, adds/deletes, overlapping reads, temporary database failures, cancellation, and user/circle/auth changes. Invalidating a request also protects a circle A → B → A round trip. No hosted data, API keys, or live Places calls are required. The fixtures replace service/network lifecycles; the signed app build checks actual SDK integration.
 
 For a device walkthrough, use a circle with several Google-linked restaurants and a manual entry. Reopen the app: the saved list should appear after the database read, while map details finish refreshing. Confirm ordering is stable (distance sorting may legitimately change as coordinates improve). Edit, delete, or mark a place visited during a slow detail refresh and check that the confirmed change remains. Switch circles rapidly, including A → B → A, and sign out while refreshing; old rows must not reappear. With loaded data and a later failed database refresh, the list should remain available. This retains in-memory data through a refresh failure; it does not add a persistent offline database or guarantee cold-start access without a network. Physical-device latency/memory profiling remains a release check.
+
+## Journal thumbnail performance
+
+Run real photo/video decoding and cache regressions without credentials or network requests:
+
+```sh
+Tests/run-media-thumbnail-tests.sh
+```
+
+To keep synthetic preview PNGs, provide an output folder. To compile/run the same production renderer/store harness on a booted iOS Simulator (also checks UIKit wrapping):
+
+```sh
+Tests/run-media-thumbnail-tests.sh /tmp/scout-thumbnail-previews
+Tests/run-media-thumbnail-tests.sh --simulator SIMULATOR_UUID /tmp/scout-thumbnail-ios-previews
+```
+
+The harness generates a 4000×3000 JPEG with EXIF rotation and verifies a 384×512 preview requiring less than 1.1MB of decoded image storage. It also checks a small transparent PNG without enlargement, corrupt images, a rotated H.264 video poster, corrupt video, and temporary-file cleanup. Deferred download fixtures verify coalescing/cache reuse, independent caller cancellation, deletion, sign-out generation invalidation, replacement isolation, and retry after failure. Real decoding runs in detached tasks; no Supabase credentials or original user media are used.
+
+The implementation follows Apple's [ImageIO orientation option](https://developer.apple.com/documentation/imageio/kcgimagesourcecreatethumbnailwithtransform) and [video image size limit](https://developer.apple.com/documentation/avfoundation/avassetimagegenerator/maximumsize). The cache's 32MB cost budget and 128-item limit are advisory NSCache eviction hints. The full original file is still downloaded, and opening/sharing originals is unchanged.
+
+On a physical device with a large journal, scroll index rows and scrapbook polaroids, revisit the same media in the viewer strip/cross-post preview, verify portrait orientation and video badges, and open/share an original to check full quality. Delete an item and sign out while downloads are slow; old previews must not reappear. Profile scrolling and peak memory with Instruments as part of the remaining release pass.
