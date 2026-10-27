@@ -56,3 +56,57 @@ With a signed-in session, switch circles, add/edit/delete a restaurant, and mark
 For synthetic gallery data without logging in, terminate Scout, then run `Tests/run-widget-tests.sh --fixture /path/to/the/AppGroup/container` using the directory reported by `get_app_container ... groups`. This overwrites only the local widget snapshot with test restaurants. Relaunch Scout afterward to restore its real snapshot (or clear it when signed out).
 
 Device signing requires registering `com.sakshisangani.Scout.WidgetExtension` with the same `group.com.sakshisangani.Scout` App Group as the app. Simulator signing does not verify Apple Developer provisioning for a physical device.
+
+## Real partner matching
+
+Install the pinned database-test dependency once, then run the SQL and Swift tests:
+
+```sh
+npm ci --prefix Tests/database --ignore-scripts
+Tests/run-pick-tests.sh
+```
+
+The harness applies the original matching migration and both shared-pick follow-up migrations to an isolated PGlite Postgres database with fixture auth users/circles. It runs requests as distinct authenticated roles and verifies shared decks, genuine unanimity, disagreement, ordered votes, undo, retries, stale requests, shared rematches, membership/day changes, and RLS/permission failures for forged votes or matches. It then decodes a real SQL result with the production Swift models. No hosted database, credentials, or production records are used. PGlite serializes transactions within one process; this verifies the rematch retry protocol but does not stress multiple concurrent backend connections.
+
+Scout's hosted project (`vdhhsxgirkjalysejycw`) was deployed and verified on October 26, 2026. Other environments require these migrations in order:
+
+- `20261020230236_real_partner_matching.sql`: tables, member-read policies, checked RPC, and Realtime publication membership.
+- `20261027011354_optimize_shared_pick_read_policy.sql`: cache the caller identity for session SELECT policy evaluation.
+- `20261027011514_fix_shared_pick_stale_round_error.sql`: use `PT409` / HTTP 409 for stale rounds. SQLSTATE `40001` can cause an infinite hosted PostgREST retry loop; the local test checks the exact error code.
+
+Hosted verification passed with two independent member sessions and an outsider: shared decks, single-vote non-match, duplicate retries, undo, concurrent unanimous voting, restored match, simultaneous rematches, immediate stale-round HTTP 409, disagreement, outsider RLS isolation, denied forged votes/winners, anonymous RPC denial, and WebSocket delivery of the partner's revision. Disposable accounts/circle/restaurants were removed afterward; existing user records were untouched.
+
+To repeat the opt-in hosted checks, create a dedicated disposable circle with exactly two members, three unvisited restaurants, no existing votes, and a third account outside that circle. Put the following configuration in a private file outside the repository (use the public client key, never a service-role key):
+
+```json
+{
+  "disposable": true,
+  "url": "https://PROJECT.supabase.co",
+  "anonKey": "PUBLIC_CLIENT_KEY",
+  "circleId": "DISPOSABLE_CIRCLE_UUID",
+  "accounts": [
+    {"userId": "MEMBER_A_UUID", "email": "MEMBER_A_EMAIL", "password": "PASSWORD"},
+    {"userId": "MEMBER_B_UUID", "email": "MEMBER_B_EMAIL", "password": "PASSWORD"},
+    {"userId": "OUTSIDER_UUID", "email": "OUTSIDER_EMAIL", "password": "PASSWORD"}
+  ]
+}
+```
+
+```sh
+SCOUT_PICK_TEST_CONFIG=/private/path/scout-test.json node Tests/database/hosted-partner-matching.test.mjs
+```
+
+Requires Node 22 or newer. The harness signs in through Auth and mutates only the supplied circle's rounds/votes. It requires the fixture to start fresh, waits for the Realtime subscription readiness event before voting, and bounds network requests. Remove the disposable circle and accounts and delete the private configuration afterward.
+
+Two-device walkthrough after deployment:
+
+- Sign in as two different members of the same circle. Open Pick on both; they must see the same deck/order even if their device time zones differ. No progress appears for a member who has not voted.
+- Say yes on only one device: no match. Say yes on the same place on the other device: both reveal the same saved match. Reopen Pick to restore it.
+- Skip on one device and yes on the other: no false match. Finish the deck on both without agreement to enable a shared new round.
+- Undo the most recent vote before matching, including from the waiting screen, and verify the other member's progress updates. A completed match is locked until rematch.
+- Trigger Pick again on both devices from the same resolved round. Both must join the same new round with votes cleared. A delayed vote for the old round must fail.
+- Lose connectivity while voting: the card must not advance without acknowledgement. Restore connectivity; the next snapshot must reconcile a vote that may have committed before its response was lost. Disable Realtime to confirm the five-second foreground polling fallback.
+- Switch circles, sign out, background, and reopen while updates are in flight. No response from the old circle/scope may replace the active round. Add/remove a member to regenerate the participant set; a three-member round needs three yes votes.
+- With only one member, show the invitation guidance and never produce a match. With no candidates, show the empty-wishlist state. Mark a deck restaurant visited/delete it or advance the server's UTC day to verify invalidation.
+
+Hosted Auth/PostgREST/Realtime checks and a signed Simulator build passed. Physical two-device UI interaction, provisioning, and connectivity gestures remain manual checks; the hosted harness does not claim to exercise those UI paths.

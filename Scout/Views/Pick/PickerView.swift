@@ -1,162 +1,17 @@
 import SwiftUI
-
-// MARK: - Time of Day
-
-enum TimeOfDay: Int {
-    case morning = 0, lunch = 1, dinner = 2
-
-    static var current: TimeOfDay {
-        let hour = Calendar.current.component(.hour, from: Date())
-        if hour < 11 { return .morning }
-        if hour < 15 { return .lunch }
-        return .dinner
-    }
-
-    var label: String {
-        switch self {
-        case .morning: return "Morning picks"
-        case .lunch:   return "Lunch picks"
-        case .dinner:  return "Dinner picks"
-        }
-    }
-
-    var accentLabel: String {
-        switch self {
-        case .morning: return "THIS MORNING"
-        case .lunch:   return "TODAY"
-        case .dinner:  return "TONIGHT"
-        }
-    }
-
-    var matchedAccentLabel: String {
-        switch self {
-        case .morning: return "THIS MORNING'S PICK"
-        case .lunch:   return "TODAY'S PICK"
-        case .dinner:  return "TONIGHT'S PICK"
-        }
-    }
-
-    var completePrefix: String {
-        switch self {
-        case .morning: return "This morning: "
-        case .lunch:   return "Today: "
-        case .dinner:  return "Tonight: "
-        }
-    }
-
-    func includes(_ type: Restaurant.EstablishmentType) -> Bool {
-        switch self {
-        case .morning:
-            // Cafes, bakeries, and restaurants (many serve brunch/breakfast)
-            return [.cafe, .bakery, .restaurant, .other].contains(type)
-        case .lunch:
-            // Everything
-            return true
-        case .dinner:
-            // Full-service spots; filter out morning-only bakeries
-            return [.restaurant, .bar, .brewery, .winery, .other].contains(type)
-        }
-    }
-}
-
-// MARK: - Deterministic seeded RNG (xorshift64)
-
-private struct SeededRNG: RandomNumberGenerator {
-    private var state: UInt64
-    init(seed: UInt64) { state = seed == 0 ? 6364136223846793005 : seed }
-    mutating func next() -> UInt64 {
-        state ^= state << 13
-        state ^= state >> 7
-        state ^= state << 17
-        return state
-    }
-}
-
-private func pickSeed(circleId: UUID, timeOfDay: TimeOfDay) -> UInt64 {
-    let c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-    let s = "\(circleId.uuidString)-\(c.year!)-\(c.month!)-\(c.day!)-\(timeOfDay.rawValue)"
-    // DJB2-style hash — deterministic across devices
-    var hash: UInt64 = 5381
-    for byte in s.utf8 { hash = hash &* 127 &+ UInt64(byte) }
-    return hash
-}
-
-// MARK: - PickSession
-
-struct PickSession {
-    var queue: [Restaurant]
-    var currentIndex: Int = 0
-    private(set) var yesIds: Set<UUID> = []
-    private(set) var skipIds: Set<UUID> = []
-    let partnerYesIds: Set<UUID>
-    let timeOfDay: TimeOfDay
-    private var history: [(id: UUID, wasYes: Bool)] = []
-
-    static let deckSize = 3
-
-    var currentCard: Restaurant? { currentIndex < queue.count ? queue[currentIndex] : nil }
-    var nextCard: Restaurant?    { (currentIndex + 1) < queue.count ? queue[currentIndex + 1] : nil }
-    var backCard: Restaurant?    { (currentIndex + 2) < queue.count ? queue[currentIndex + 2] : nil }
-
-    var totalCount: Int { queue.count }
-    var isComplete: Bool { currentIndex >= queue.count }
-    var canUndo: Bool { !history.isEmpty }
-
-    var partnerDoneCount: Int {
-        min(totalCount, Int(Double(currentIndex) * 1.3) + 1)
-    }
-
-    var firstMatch: Restaurant? {
-        queue.first { yesIds.contains($0.id) && partnerYesIds.contains($0.id) }
-    }
-
-    // Seed is deterministic: same circle + same calendar day + same time window
-    // → all members see the same 3 restaurants
-    init(restaurants: [Restaurant], circleId: UUID) {
-        let tod = TimeOfDay.current
-        timeOfDay = tod
-
-        let filtered = restaurants.filter { tod.includes($0.establishmentType) }
-        let pool = filtered.isEmpty ? restaurants : filtered  // fallback: show all if filter empties deck
-
-        var rng = SeededRNG(seed: pickSeed(circleId: circleId, timeOfDay: tod))
-        let deck = Array(pool.shuffled(using: &rng).prefix(PickSession.deckSize))
-        queue = deck
-
-        // Partner votes use an offset seed so they differ from the user's own outcome
-        var partnerRng = SeededRNG(seed: pickSeed(circleId: circleId, timeOfDay: tod) &+ 0xDEAD)
-        let yesCount = max(1, Int(Double(deck.count) * 0.6))
-        partnerYesIds = Set(deck.shuffled(using: &partnerRng).prefix(yesCount).map { $0.id })
-    }
-
-    mutating func swipeYes() {
-        guard let card = currentCard else { return }
-        yesIds.insert(card.id)
-        history.append((id: card.id, wasYes: true))
-        currentIndex += 1
-    }
-
-    mutating func swipeSkip() {
-        guard let card = currentCard else { return }
-        skipIds.insert(card.id)
-        history.append((id: card.id, wasYes: false))
-        currentIndex += 1
-    }
-
-    mutating func undo() {
-        guard let last = history.last, currentIndex > 0 else { return }
-        history.removeLast()
-        currentIndex -= 1
-        if last.wasYes { yesIds.remove(last.id) } else { skipIds.remove(last.id) }
-    }
-}
+import Supabase
 
 // MARK: - PickerView
 
 struct PickerView: View {
     @Environment(AppState.self) private var appState
     @State private var showCirclePicker = false
-    @State private var session: PickSession?
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var reloadID = UUID()
+    private var session: PickSession? {
+        guard let snapshot = appState.pickSession, let userId = appState.currentUser?.id else { return nil }
+        return PickSession(snapshot: snapshot, userId: userId)
+    }
     @State private var dragOffset: CGSize = .zero
     @State private var matchedRestaurant: Restaurant?  // drives the fullScreenCover
 
@@ -169,15 +24,24 @@ struct PickerView: View {
             Atlas.paper.ignoresSafeArea()
             VStack(spacing: 0) {
                 headerBar
+                if let error = appState.pickError {
+                    Text(error).font(Atlas.Font.sans(12)).foregroundColor(Atlas.burnt)
+                        .padding(.horizontal, Atlas.screenHPad).padding(.top, 8)
+                }
                 if let circle = appState.activeCircle {
                     if let match = appState.activePickMatch {
                         matchedView(restaurant: match, circle: circle)
+                    } else if let s = session, s.snapshot.memberIds.count < 2 {
+                        statusState("Pick together", detail: "Add another member to this circle to find a shared match.")
                     } else if let s = session, !s.queue.isEmpty {
                         if s.isComplete {
                             completeView(session: s, circle: circle)
                         } else {
                             pickContent(session: s, circle: circle)
                         }
+                    } else if session == nil {
+                        statusState(appState.pickError == nil ? "Syncing your round…" : "Unable to sync",
+                                    detail: "Everyone in the circle sees the same saved round.")
                     } else {
                         emptyWishlistState
                     }
@@ -186,10 +50,16 @@ struct PickerView: View {
                 }
             }
         }
-        .onAppear { startSession() }
-        .onChange(of: appState.activeCircle?.id) { _, _ in
-            appState.clearPickMatch()
-            startSession()
+        .task(id: "\(appState.activeCircle?.id.uuidString ?? "none")-\(scenePhase == .active)-\(reloadID)") {
+            guard scenePhase == .active, let circleId = appState.activeCircle?.id else { return }
+            await appState.observePickSession(circleId: circleId)
+        }
+        .onChange(of: appState.pickSession?.id) { _, _ in
+            matchedRestaurant = nil
+            dragOffset = .zero
+        }
+        .onChange(of: appState.pickSession?.matchedRestaurantId) { _, newValue in
+            if newValue != nil { matchedRestaurant = appState.activePickMatch }
         }
         .sheet(isPresented: $showCirclePicker) {
             CirclePickerSheet(isPresented: $showCirclePicker)
@@ -203,13 +73,10 @@ struct PickerView: View {
                     restaurant: restaurant,
                     circle: circle,
                     onConfirm: {
-                        let r = restaurant
                         matchedRestaurant = nil
-                        appState.savePickMatch(r)
                     },
                     onPickAgain: {
                         matchedRestaurant = nil
-                        appState.clearPickMatch()
                         startSession()
                     }
                 )
@@ -239,7 +106,6 @@ struct PickerView: View {
 
     private var rematchButton: some View {
         Button {
-            appState.clearPickMatch()
             startSession()
         } label: {
             ZStack {
@@ -253,6 +119,7 @@ struct PickerView: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, 20)
+        .disabled(appState.isPickBusy || appState.pickError != nil)
     }
 
     // MARK: - Matched State (persists after MatchView confirm)
@@ -403,6 +270,7 @@ struct PickerView: View {
                 radius: 22, x: 0, y: 16
             )
             .overlay(RoundedRectangle(cornerRadius: 28).stroke(Atlas.ink.opacity(0.06), lineWidth: 1))
+            .allowsHitTesting(!appState.isPickBusy && appState.pickError == nil)
             .gesture(
                 DragGesture()
                     .onChanged { v in
@@ -472,12 +340,8 @@ struct PickerView: View {
             .shadow(color: Atlas.burnt.opacity(0.35), radius: 12, x: 0, y: 10)
 
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                    guard var s = self.session else { return }
-                    s.undo()
-                    self.session = s
-                    dragOffset = .zero
-                }
+                guard let restaurantId = session.lastVotedId else { return }
+                Task { await appState.sendPickAction("undo", restaurantId: restaurantId) }
             } label: {
                 ZStack {
                     Circle()
@@ -495,48 +359,33 @@ struct PickerView: View {
             .opacity(session.canUndo ? 1 : 0.38)
         }
         .padding(.top, 26)
+        .disabled(appState.isPickBusy || appState.pickError != nil)
     }
 
     // MARK: - Partner Status Bar
 
     private func partnerBar(session: PickSession, circle: ScoutCircle) -> some View {
-        let partner = circle.members.dropFirst().first ?? circle.members.last
-        let done = session.partnerDoneCount
-        let total = max(1, session.totalCount)
-        let progress = min(1.0, Double(done) / Double(total))
-        let name = partner?.initials ?? "?"
-
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(Atlas.ink).frame(width: 30, height: 30)
-                Text(name)
-                    .font(Atlas.Font.serif(12))
-                    .foregroundColor(Atlas.paper)
+        let partners = session.snapshot.memberIds.filter { $0 != appState.currentUser?.id }
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(partners, id: \.self) { partnerId in
+                let done = session.snapshot.progress(for: partnerId)
+                let initials = circle.members.first { $0.userId == partnerId }?.initials ?? "Member"
+                HStack(spacing: 10) {
+                    Text(initials).font(Atlas.Font.sans(12, weight: .semibold)).foregroundColor(Atlas.burnt)
+                    Text("\(done) of \(session.totalCount) done")
+                        .font(Atlas.Font.sans(12)).foregroundColor(Atlas.ink2)
+                    Spacer()
+                    if done == 0 { Text("Waiting").font(Atlas.Font.sans(11)).foregroundColor(Atlas.ink3) }
+                }
             }
-
-            (Text(name)
-                .font(Atlas.Font.sans(12.5, weight: .semibold))
-                .foregroundColor(Atlas.ink)
-            + Text(" is also picking · \(done) of \(session.totalCount) done")
-                .font(Atlas.Font.sans(12.5))
-                .foregroundColor(Atlas.ink2))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            ZStack(alignment: .leading) {
-                Capsule().fill(Atlas.rule).frame(width: 40, height: 6)
-                Capsule()
-                    .fill(Atlas.burnt)
-                    .frame(width: max(4, 40 * CGFloat(progress)), height: 6)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: done)
+            if partners.isEmpty {
+                Text("Waiting for your circle members").font(Atlas.Font.sans(12)).foregroundColor(Atlas.ink2)
             }
+            if appState.isPickBusy { ProgressView().tint(Atlas.burnt) }
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 16)
-        .background(Atlas.paper2)
+        .padding(14).background(Atlas.paper2)
         .clipShape(RoundedRectangle(cornerRadius: 18))
-        .padding(.horizontal, Atlas.screenHPad)
-        .padding(.top, 20)
+        .padding(.horizontal, Atlas.screenHPad).padding(.top, 20)
     }
 
     // MARK: - Session Complete State
@@ -579,11 +428,11 @@ struct PickerView: View {
                 }
             } else {
                 VStack(spacing: 12) {
-                    Text("No match this round")
+                    Text(session.snapshot.everyoneFinished ? "No match this round" : "Waiting for your circle")
                         .font(Atlas.Font.serif(28))
                         .foregroundColor(Atlas.ink)
                         .multilineTextAlignment(.center)
-                    Text("Keep swiping or try a fresh set.")
+                    Text(session.snapshot.everyoneFinished ? "Everyone finished without a shared yes. Try a new round together." : "Your votes are saved. A match appears when everyone says yes to the same place.")
                         .font(Atlas.Font.sans(14))
                         .foregroundColor(Atlas.ink2)
                         .multilineTextAlignment(.center)
@@ -602,6 +451,16 @@ struct PickerView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, Atlas.screenHPad)
             .padding(.top, 16)
+            .disabled(!session.snapshot.everyoneFinished || appState.isPickBusy || appState.pickError != nil)
+            if session.canUndo {
+                Button("Undo last vote") {
+                    guard let id = session.lastVotedId else { return }
+                    Task { await appState.sendPickAction("undo", restaurantId: id) }
+                }
+                .font(Atlas.Font.sans(13)).foregroundColor(Atlas.burnt).padding(.top, 12)
+                .disabled(appState.isPickBusy || appState.pickError != nil)
+            }
+            partnerBar(session: session, circle: circle)
 
             Spacer(minLength: Atlas.listBottomPad)
         }
@@ -639,37 +498,27 @@ struct PickerView: View {
 
     // MARK: - Session Management
 
+    private func statusState(_ title: String, detail: String) -> some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Text(title).font(Atlas.Font.serif(26)).foregroundColor(Atlas.ink)
+            Text(detail).font(Atlas.Font.sans(14)).foregroundColor(Atlas.ink2).multilineTextAlignment(.center)
+            Button("Refresh") { reloadID = UUID() }.foregroundColor(Atlas.burnt)
+            Spacer(minLength: Atlas.listBottomPad)
+        }.padding(.horizontal, Atlas.screenHPad)
+    }
+
     private func startSession() {
-        guard let circleId = appState.activeCircle?.id else {
-            session = nil
-            return
-        }
-        let candidates = appState.restaurants.filter { $0.status == .wantToTry }
-        session = candidates.isEmpty ? nil : PickSession(restaurants: candidates, circleId: circleId)
+        Task { await appState.sendPickAction("reset") }
         dragOffset = .zero
     }
 
-    // MARK: - Swipe Mechanics
-
     private func performSwipe(yes: Bool) {
-        guard session?.currentCard != nil else { return }
-        let direction: CGFloat = yes ? 1 : -1
-
-        withAnimation(.easeOut(duration: 0.25)) {
-            dragOffset = CGSize(width: direction * 520, height: dragOffset.height * 0.4)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            guard var current = session else { return }
-            dragOffset = .zero
-            if yes { current.swipeYes() } else { current.swipeSkip() }
-            session = current
-            if current.isComplete, let match = current.firstMatch {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    matchedRestaurant = match
-                }
-            }
-        }
+        guard let card = session?.currentCard, !appState.isPickBusy, appState.pickError == nil else { return }
+        dragOffset = .zero
+        Task { await appState.sendPickAction("vote", restaurantId: card.id, yes: yes) }
     }
+
 }
 
 // MARK: - PickCard
