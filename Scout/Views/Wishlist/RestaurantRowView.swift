@@ -57,9 +57,8 @@ struct RestaurantRowView: View {
                 .font(Atlas.Font.sans(12.5))
                 .foregroundColor(Atlas.ink2)
 
-                // Status dot + vibe tags
+                // Vibe tags; opening status is checked on the detail screen.
                 HStack(spacing: 0) {
-                    StatusDot(status: .open)  // Phase 2 will wire real hours data
                     Spacer()
                     HStack(spacing: 0) {
                         ForEach(restaurant.vibeTags.prefix(2), id: \.self) { tag in

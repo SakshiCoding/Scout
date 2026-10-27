@@ -11,8 +11,23 @@ struct RestaurantDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var showReservationOptions = false
     @State private var isDeleting = false
-    @State private var contactDetails: PlaceContactDetails?
-    @State private var contactDetailsTask: Task<Void, Never>?
+    @State private var detailsState = PlaceDetailsLoadState()
+    @State private var refreshId = 0
+    @Environment(\.scenePhase) private var scenePhase
+
+    private var contactDetails: PlaceContactDetails? { detailsState.details }
+    private struct DetailsRequest: Hashable {
+        let placeId: String?
+        let circleId: UUID?
+        let isActive: Bool
+        let authenticated: Bool
+        let refreshId: Int
+    }
+    private var detailsRequest: DetailsRequest {
+        DetailsRequest(placeId: restaurant?.googlePlaceId, circleId: appState.activeCircle?.id,
+                       isActive: scenePhase == .active, authenticated: appState.isAuthenticated,
+                       refreshId: refreshId)
+    }
 
     @Environment(\.openURL) private var openURL
 
@@ -29,6 +44,11 @@ struct RestaurantDetailView: View {
                             heroArea(r)
                             titleBlock(r)
                             statRow(r)
+                            RestaurantHoursCard(details: contactDetails, isLoading: detailsState.isLoading,
+                                failed: detailsState.failed, canLoad: r.googlePlaceId != nil,
+                                refresh: { refreshId += 1 })
+                                .padding(.horizontal, Atlas.screenHPad)
+                                .padding(.top, 20)
                             if let notes = r.notes, !notes.isEmpty {
                                 noteCard(notes)
                             }
@@ -107,18 +127,18 @@ struct RestaurantDetailView: View {
             if let r = restaurant {
                 if contactDetails?.hasDirectContact == true {
                     Text("Search reservation platforms or use the restaurant's Google Places contact info.")
-                } else if contactDetailsTask != nil {
+                } else if detailsState.isLoading {
                     Text("Searching for \(r.name)'s website and phone number.")
                 } else {
                     Text("Search for \(r.name) on your preferred reservation platform.")
                 }
             }
         }
-        .task(id: restaurant?.googlePlaceId) {
-            loadContactDetails()
-        }
-        .onDisappear {
-            contactDetailsTask?.cancel()
+        .task(id: detailsRequest) {
+            let request = detailsRequest
+            await detailsState.load(placeId: request.isActive && request.authenticated ? request.placeId : nil) {
+                await appState.places.contactDetails(placeId: $0)
+            }
         }
     }
 
@@ -202,9 +222,6 @@ struct RestaurantDetailView: View {
                 .lineLimit(3)
                 .minimumScaleFactor(0.8)
                 .padding(.top, 8)
-
-            StatusDot(status: .open)
-                .padding(.top, 12)
         }
         .padding(.horizontal, Atlas.screenHPad)
         .padding(.top, 22)
@@ -414,19 +431,6 @@ struct RestaurantDetailView: View {
         }
         if let url = components.url {
             openURL(url)
-        }
-    }
-
-    private func loadContactDetails() {
-        contactDetailsTask?.cancel()
-        contactDetails = nil
-        guard let restaurant, restaurant.googlePlaceId != nil else { return }
-
-        contactDetailsTask = Task {
-            let details = await PlacesService.shared.contactDetails(for: restaurant)
-            guard !Task.isCancelled else { return }
-            contactDetails = details
-            contactDetailsTask = nil
         }
     }
 

@@ -237,3 +237,18 @@ The harness generates a 4000×3000 JPEG with EXIF rotation and verifies a 384×5
 The implementation follows Apple's [ImageIO orientation option](https://developer.apple.com/documentation/imageio/kcgimagesourcecreatethumbnailwithtransform) and [video image size limit](https://developer.apple.com/documentation/avfoundation/avassetimagegenerator/maximumsize). The cache's 32MB cost budget and 128-item limit are advisory NSCache eviction hints. The full original file is still downloaded, and opening/sharing originals is unchanged.
 
 On a physical device with a large journal, scroll index rows and scrapbook polaroids, revisit the same media in the viewer strip/cross-post preview, verify portrait orientation and video badges, and open/share an original to check full quality. Delete an item and sign out while downloads are slow; old previews must not reappear. Profile scrolling and peak memory with Instruments as part of the remaining release pass.
+
+## Restaurant opening hours
+
+```sh
+Tests/run-place-hours-tests.sh
+Tests/run-place-hours-tests.sh /tmp/scout-hours-previews
+```
+
+This credential-free harness compiles the production hours model, load-state model, Atlas theme, and hours card. Deferred responses verify loading, manual/empty-ID fallback, overlapping requests, retry after failure, cancellation, and invalidating a request while the app is inactive or signed out. Data checks preserve localized weekday order, split/overnight/24-hour text, checked status/date, contacts, and linked attribution. Seven production card PNGs cover ready/loading/failed/manual/unknown/temporary/permanent closure states; supplying a folder retains them for visual review.
+
+The SDK integration follows Google's [Place Details and supported open-status API](https://developers.google.com/maps/documentation/places/ios-sdk/details-place) and [source attribution](https://developers.google.com/maps/documentation/places/ios-sdk/policies). A detail-screen request fetches explicit website/phone, place ID, regular/current/secondary hours, UTC offset, and business status fields. It does not add hours to list/map requests or persist them. The checked status includes a timestamp rather than claiming it stays live indefinitely. Missing required hours remain unknown; weekday strings are not parsed to guess status or today's row.
+
+With a configured Google key, open a Google-linked restaurant. Check weekly hours and source attribution, Refresh, website/phone reservation actions, and a foreground refresh after leaving the app. Try a manual place and a place without published hours. On a slow connection, leave the detail screen, switch circles, or sign out before the response; old details must not appear in another scope. Disable connectivity and Retry; saved-place actions should remain usable. Check temporary/permanent closures when available, localized schedules, VoiceOver, and larger text sizes on a device. Hour fields may affect Google API billing; they are requested only by the detail screen.
+
+Live verification status (October 27, 2026): a disposable Simulator app compiled the production Places service, loader, model, and hours card against the installed SDK. Google rejected both the detail lookup and a minimal Place ID-only diagnostic with HTTP 400 / API_KEY_INVALID: “API key expired.” The implementation/local checks are complete, but no successful live hours response has been verified. Replace GOOGLE_MAPS_API_KEY in the ignored Scout/Config.xcconfig with a valid iOS key for com.sakshisangani.Scout with Places API (New) access, rebuild, and repeat the live check before merging. No Supabase accounts or records were changed.
