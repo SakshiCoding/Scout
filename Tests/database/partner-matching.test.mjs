@@ -19,8 +19,11 @@ insert into circles values ('${circle}'),('${other}');
 insert into circle_members values ('${circle}','${a}'),('${circle}','${b}'),('${other}','${outsider}');
 insert into restaurants(id,circle_id,name,status,establishment_type) values ('${r1}','${circle}','One','want_to_try','restaurant'),('${r2}','${circle}','Two','want_to_try','restaurant'),('${r3}','${circle}','Three','want_to_try','cafe');
 `);
-const migration = await readFile(new URL('../../supabase/migrations/20261020230236_real_partner_matching.sql', import.meta.url), 'utf8');
-await db.exec(migration);
+for (const name of ['20261020230236_real_partner_matching.sql',
+  '20261027011354_optimize_shared_pick_read_policy.sql',
+  '20261027011514_fix_shared_pick_stale_round_error.sql']) {
+  await db.exec(await readFile(new URL('../../supabase/migrations/'+name, import.meta.url), 'utf8'));
+}
 async function rpc(user, action='sync', session=null, restaurant=null, yes=null, window=1, circleId=circle) {
   return db.transaction(async tx => {
     await tx.exec(`set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true)`);
@@ -56,7 +59,11 @@ assert.equal(reset1.id,reset2.id);
 assert.notEqual(reset1.id,old);
 assert.equal(reset2.votes.length,0);
 assert.equal(reset2.matched_restaurant_id,null);
-await assert.rejects(rpc(a,'vote',old,first,true), /round changed/);
+await assert.rejects(rpc(a,'vote',old,first,true), error => {
+  assert.match(error.message, /round changed/);
+  assert.equal(error.code, 'PT409'); // application conflict must not trigger PostgREST's 40001 retry loop
+  return true;
+});
 s=reset2;
 for (const restaurant of s.restaurant_ids) {
   await rpc(a,'vote',s.id,restaurant,true);

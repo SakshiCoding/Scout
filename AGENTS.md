@@ -8,7 +8,7 @@ Scout is a shared restaurant wishlist iOS app organized around **circles** — n
 
 ## Current State
 
-The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, and server-authoritative circle matching are implemented (shared matching requires its new database migration).
+The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, and server-authoritative circle matching are implemented (shared matching is deployed to Scout).
 
 | File | Status |
 |------|--------|
@@ -27,7 +27,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping and password-reset email action |
 | `Scout/Views/Auth/ResetPasswordView.swift` | Recovery-link destination for choosing and saving a new password |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows; add form automatically requests Gemini cuisine/vibe suggestions for generic Places results and offers a manual suggestion button, preserving user edits and rejecting stale responses |
-| `Tests/` | Credential-free Gemini, widget, and shared-pick regression harnesses; `run-pick-tests.sh` runs the real migration in PGlite Postgres with multiple auth identities, then decodes its snapshot in Swift; see `Tests/README.md` |
+| `Tests/` | Credential-free Gemini, widget, and shared-pick regression harnesses; `run-pick-tests.sh` runs the matching migrations in PGlite Postgres with multiple auth identities, then decodes its snapshot in Swift; opt-in hosted Auth/PostgREST/Realtime checks are in `Tests/database/hosted-partner-matching.test.mjs`; see `Tests/README.md` |
 | `Scout/Views/Import/ImportReviewView.swift` | Main-app import review sheet for shared Safari/Apple Maps/Google Maps/TikTok/Instagram places: circle selection, Gemini-powered social text prefill, Places match suggestions, manual fallback when no match is found, note, and save |
 | `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut, and reservation/contact actions |
 | `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
@@ -220,7 +220,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 |---|-----------|-----|--------|---------|
 | 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; add flow uses Google Places search and persists Place IDs when configured; Gemini fills cuisine/vibe gaps for generic results, with editable suggestions and a manual name-based action |
 | 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, OpenTable/Resy search links, and Google website/phone actions when available |
-| 3 | `PickerView` + `MatchView` | Pick | Implemented (migration required) | All members share one server-created deck of up to three places. A match requires yes from every round participant (minimum two); actual member progress syncs via Realtime with polling recovery. Votes/matches resume on reopen; undo is allowed before a match; shared rematches are serialized. No simulated partner or UserDefaults match fallback. |
+| 3 | `PickerView` + `MatchView` | Pick | Implemented / hosted verified | All members share one server-created deck of up to three places. A match requires yes from every round participant (minimum two); actual member progress syncs via Realtime with polling recovery. Votes/matches resume on reopen; undo is allowed before a match; shared rematches are serialized. No simulated partner or UserDefaults match fallback. |
 | 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, tap-triggered user location, and filter wiring |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch between circles |
 | 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
@@ -282,7 +282,7 @@ Phase 1 verified behavior:
 - [x] JournalComposeView (editable date, occasion, note, vibe tags, photo/video attachment management)
 - [x] JournalViewerView (fullscreen photo/video viewer with swipe paging, captions, thumbnails, and native video playback)
 - [x] CrossPostSheet (copy media to another circle, signed-link copy, and native iOS sharing)
-- [x] PickerView + MatchView (server-authoritative shared round, real circle-member votes/progress, unanimous matching, undo/rematch, Realtime plus polling recovery, and revision guards; apply the shared matching migration before use)
+- [x] PickerView + MatchView (server-authoritative shared round, real circle-member votes/progress, unanimous matching, undo/rematch, Realtime plus polling recovery, and revision guards; deployed and verified against hosted Scout)
 - [x] MediaService (cached photo/video thumbnails, external-share file preparation, and direct camera photo capture)
 - [x] Reservation deep links (OpenTable/Resy search links plus Google website/phone actions when available)
 
@@ -308,7 +308,7 @@ Verification: `Tests/run-metadata-tests.sh` exercises the production service wit
 
 ### Shared partner matching — deployment and behavior
 
-Apply `supabase/migrations/20261020230236_real_partner_matching.sql` to Scout before testing shared picks against the hosted app. This change has not applied it to the hosted project: the connected Supabase account does not expose Scout. Until deployment, the new picker fails closed with a sync error rather than simulating votes.
+Scout's hosted project (`vdhhsxgirkjalysejycw`) has the matching migration deployed and verified as of October 26, 2026. For other databases, apply `20261020230236_real_partner_matching.sql`, `20261027011354_optimize_shared_pick_read_policy.sql`, and `20261027011514_fix_shared_pick_stale_round_error.sql` in order. The follow-ups evaluate the session policy identity once per statement and return `PT409` / HTTP 409 for stale-round actions. Do not use `40001` for this application conflict: hosted PostgREST can retry it indefinitely. Without the migrations, the picker fails closed with a sync error.
 
 The `scout_pick` RPC creates/loads one shared round per circle. The first opener's time-of-day determines the restaurant-type filter; the resulting server deck is fixed for everyone. The server uses a UTC calendar day so device time zones cannot split the round. A new UTC day, membership change, or invalidated/visited deck card regenerates the round. Additional wishlist places do not reshuffle an in-progress deck.
 
@@ -318,7 +318,7 @@ Client writes wait for acknowledgement. Realtime session-revision changes trigge
 
 Both new tables have circle-member SELECT policies; client table writes are revoked. The public RPC is security invoker and delegates to a non-exposed `scout_private` function with an empty search path, explicit `auth.uid()`/membership checks, ordered self-votes, and transaction-level per-circle locking. No caller-supplied user ID is accepted. The migration adds `pick_sessions` to `supabase_realtime` when that publication exists.
 
-Validation uses the actual migration in isolated PGlite Postgres with distinct authenticated identities and RLS/forged-write tests, followed by Swift decoding/projection tests. These do not replace hosted PostgREST/WebSocket or two-device checks; deployment walkthroughs are in `Tests/README.md`.
+Validation applies the actual migrations in isolated PGlite Postgres with distinct authenticated identities and RLS/forged-write tests, followed by Swift decoding/projection tests. Hosted verification used three disposable Auth accounts, a dedicated circle, real PostgREST requests, and an authenticated WebSocket: canonical decks, acknowledged votes, undo, persistence, concurrent unanimous matching/rematches, stale HTTP 409 responses, disagreement, outsider isolation, and forged/anonymous write denial passed. Test fixtures were removed afterward. A signed Simulator build passed; physical two-device interaction remains a manual check. The opt-in hosted harness and walkthrough are documented in `Tests/README.md`.
 
 ---
 

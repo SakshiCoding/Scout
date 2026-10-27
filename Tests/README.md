@@ -66,9 +66,37 @@ npm ci --prefix Tests/database --ignore-scripts
 Tests/run-pick-tests.sh
 ```
 
-The harness applies `20261020230236_real_partner_matching.sql` to an isolated PGlite Postgres database with fixture auth users/circles. It runs requests as distinct authenticated roles and verifies shared decks, genuine unanimity, disagreement, ordered votes, undo, retries, stale requests, shared rematches, membership/day changes, and RLS/permission failures for forged votes or matches. It then decodes a real SQL result with the production Swift models. No hosted database, credentials, or production records are used. PGlite serializes transactions within one process; this verifies the rematch retry protocol but does not stress multiple concurrent backend connections.
+The harness applies the original matching migration and both shared-pick follow-up migrations to an isolated PGlite Postgres database with fixture auth users/circles. It runs requests as distinct authenticated roles and verifies shared decks, genuine unanimity, disagreement, ordered votes, undo, retries, stale requests, shared rematches, membership/day changes, and RLS/permission failures for forged votes or matches. It then decodes a real SQL result with the production Swift models. No hosted database, credentials, or production records are used. PGlite serializes transactions within one process; this verifies the rematch retry protocol but does not stress multiple concurrent backend connections.
 
-Before a hosted/device walkthrough, apply the new migration to **Scout's** Supabase project. It creates two tables, member-read policies, a checked RPC, and Realtime publication membership. It does not change legacy `picks` rows. This PR does not deploy the migration to Scout; the connected account did not include that project.
+Scout's hosted project (`vdhhsxgirkjalysejycw`) was deployed and verified on October 26, 2026. Other environments require these migrations in order:
+
+- `20261020230236_real_partner_matching.sql`: tables, member-read policies, checked RPC, and Realtime publication membership.
+- `20261027011354_optimize_shared_pick_read_policy.sql`: cache the caller identity for session SELECT policy evaluation.
+- `20261027011514_fix_shared_pick_stale_round_error.sql`: use `PT409` / HTTP 409 for stale rounds. SQLSTATE `40001` can cause an infinite hosted PostgREST retry loop; the local test checks the exact error code.
+
+Hosted verification passed with two independent member sessions and an outsider: shared decks, single-vote non-match, duplicate retries, undo, concurrent unanimous voting, restored match, simultaneous rematches, immediate stale-round HTTP 409, disagreement, outsider RLS isolation, denied forged votes/winners, anonymous RPC denial, and WebSocket delivery of the partner's revision. Disposable accounts/circle/restaurants were removed afterward; existing user records were untouched.
+
+To repeat the opt-in hosted checks, create a dedicated disposable circle with exactly two members, three unvisited restaurants, no existing votes, and a third account outside that circle. Put the following configuration in a private file outside the repository (use the public client key, never a service-role key):
+
+```json
+{
+  "disposable": true,
+  "url": "https://PROJECT.supabase.co",
+  "anonKey": "PUBLIC_CLIENT_KEY",
+  "circleId": "DISPOSABLE_CIRCLE_UUID",
+  "accounts": [
+    {"userId": "MEMBER_A_UUID", "email": "MEMBER_A_EMAIL", "password": "PASSWORD"},
+    {"userId": "MEMBER_B_UUID", "email": "MEMBER_B_EMAIL", "password": "PASSWORD"},
+    {"userId": "OUTSIDER_UUID", "email": "OUTSIDER_EMAIL", "password": "PASSWORD"}
+  ]
+}
+```
+
+```sh
+SCOUT_PICK_TEST_CONFIG=/private/path/scout-test.json node Tests/database/hosted-partner-matching.test.mjs
+```
+
+Requires Node 22 or newer. The harness signs in through Auth and mutates only the supplied circle's rounds/votes. It requires the fixture to start fresh, waits for the Realtime subscription readiness event before voting, and bounds network requests. Remove the disposable circle and accounts and delete the private configuration afterward.
 
 Two-device walkthrough after deployment:
 
@@ -81,4 +109,4 @@ Two-device walkthrough after deployment:
 - Switch circles, sign out, background, and reopen while updates are in flight. No response from the old circle/scope may replace the active round. Add/remove a member to regenerate the participant set; a three-member round needs three yes votes.
 - With only one member, show the invitation guidance and never produce a match. With no candidates, show the empty-wishlist state. Mark a deck restaurant visited/delete it or advance the server's UTC day to verify invalidation.
 
-Hosted PostgREST/Realtime and physical two-device interactions remain manual integration checks; local SQL tests and the simulator build do not verify that the hosted migration/publication is deployed.
+Hosted Auth/PostgREST/Realtime checks and a signed Simulator build passed. Physical two-device UI interaction, provisioning, and connectivity gestures remain manual checks; the hosted harness does not claim to exercise those UI paths.
