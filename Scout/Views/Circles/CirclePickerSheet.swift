@@ -3,7 +3,17 @@ import SwiftUI
 struct CirclePickerSheet: View {
     @Environment(AppState.self) private var appState
     @Binding var isPresented: Bool
-    @State private var showNewCircle = false
+    @State private var destination: Destination?
+    private enum Destination: Identifiable {
+        case new, join, invite(ScoutCircle)
+        var id: String {
+            switch self {
+            case .new: "new"
+            case .join: "join"
+            case .invite(let circle): circle.id.uuidString
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +49,17 @@ struct CirclePickerSheet: View {
                         }
                     }
 
-                    NewCircleRow { showNewCircle = true }
+                    if let circle = appState.activeCircle {
+                        Button { destination = .invite(circle) } label: {
+                            Label("Invite to \(circle.name)", systemImage: "person.badge.plus")
+                                .font(Atlas.Font.sans(14, weight: .semibold)).frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                        }.foregroundStyle(Atlas.burnt)
+                    }
+                    Button { destination = .join } label: {
+                        Label("Join a circle", systemImage: "link")
+                            .font(Atlas.Font.sans(14, weight: .semibold)).frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                    }.foregroundStyle(Atlas.burnt)
+                    NewCircleRow { destination = .new }
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 36)
@@ -48,9 +68,18 @@ struct CirclePickerSheet: View {
         .background(Atlas.paper)
         .clipShape(RoundedRectangle(cornerRadius: Atlas.sheetTopRadius, style: .continuous))
         .ignoresSafeArea(edges: .bottom)
-        .sheet(isPresented: $showNewCircle) {
-            NewCircleSheet(isPresented: $showNewCircle)
-                .presentationCornerRadius(Atlas.sheetTopRadius)
+        .task { await appState.loadCircles() }
+        .sheet(item: $destination) { target in
+            switch target {
+            case .new:
+                NewCircleSheet(isPresented: Binding(get: { destination != nil }, set: { if !$0 { destination = nil } }))
+                    .presentationCornerRadius(Atlas.sheetTopRadius)
+            case .join:
+                JoinCircleSheet(onJoined: { isPresented = false })
+                    .presentationCornerRadius(Atlas.sheetTopRadius)
+            case .invite(let circle):
+                InviteCircleSheet(circle: circle).presentationCornerRadius(Atlas.sheetTopRadius)
+            }
         }
     }
 }

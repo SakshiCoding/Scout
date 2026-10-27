@@ -15,6 +15,7 @@ final class AppState {
 
     // MARK: - Circles
     var circles: [ScoutCircle] = []
+    private var circleLoadRequestId = UUID()
     var activeCircle: ScoutCircle? { didSet {
         if oldValue?.id != activeCircle?.id { resetPickState() }
         publishWidgetSnapshot()
@@ -50,6 +51,9 @@ final class AppState {
 
     // MARK: - Shared import flow
     var pendingSharedImport: SharedRestaurantImport?
+    // Retained only in memory so an invite opened while signed out can continue after sign-in.
+    var pendingCircleInvite: CircleInviteCode?
+    var invitationLinkError = false
 
     private func resetPickState() {
         pickScopeID = UUID()
@@ -172,6 +176,8 @@ final class AppState {
 
     func loadCircles() async {
         guard let userId = currentUser?.id else { return }
+        let requestId = UUID()
+        circleLoadRequestId = requestId
         do {
             var fetched = try await supabase.fetchCircles(for: userId)
             // Populate counts
@@ -180,13 +186,15 @@ final class AppState {
                 fetched[i].restaurantCount = rests?.filter { $0.status == .wantToTry }.count ?? 0
                 fetched[i].visitedCount    = rests?.filter { $0.status == .visited }.count ?? 0
             }
-            guard isAuthenticated, currentUser?.id == userId else { return }
+            guard isAuthenticated, currentUser?.id == userId, circleLoadRequestId == requestId else { return }
             circles = fetched
             restoreActiveCircle()
         } catch {
             // Circles will remain empty; user sees empty state
         }
     }
+
+    func invalidateCircleLoads() { circleLoadRequestId = UUID() }
 
     func loadRestaurants() async {
         guard let circleId = activeCircle?.id else { return }
@@ -199,6 +207,10 @@ final class AppState {
             let enriched = await places.enrichGoogleRestaurants(fetched)
             guard isAuthenticated, activeCircle?.id == circleId else { return }
             restaurants = enriched
+            if let index = circles.firstIndex(where: { $0.id == circleId }) {
+                circles[index].restaurantCount = enriched.filter { $0.status == .wantToTry }.count
+                circles[index].visitedCount = enriched.filter { $0.status == .visited }.count
+            }
         } catch {
             guard isAuthenticated, activeCircle?.id == circleId else { return }
             restaurants = []
@@ -294,6 +306,12 @@ final class AppState {
     }
 
     func handleOpenURL(_ url: URL) {
+        if url.scheme?.lowercased() == "scout", url.host?.lowercased() == "join" {
+            // Invalid links show an error without accepting any membership.
+            pendingCircleInvite = CircleInviteCode(url.absoluteString)
+            invitationLinkError = pendingCircleInvite == nil
+            return
+        }
         if let destination = ScoutDestination(url: url) {
             navigate(to: destination)
             return

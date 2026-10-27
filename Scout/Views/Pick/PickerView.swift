@@ -32,7 +32,7 @@ struct PickerView: View {
                     if let match = appState.activePickMatch {
                         matchedView(restaurant: match, circle: circle)
                     } else if let s = session, s.snapshot.memberIds.count < 2 {
-                        statusState("Pick together", detail: "Add another member to this circle to find a shared match.")
+                        statusState("Pick together", detail: "Invite someone to this circle to find a shared match.", offerInvite: true)
                     } else if let s = session, !s.queue.isEmpty {
                         if s.isComplete {
                             completeView(session: s, circle: circle)
@@ -498,11 +498,14 @@ struct PickerView: View {
 
     // MARK: - Session Management
 
-    private func statusState(_ title: String, detail: String) -> some View {
+    private func statusState(_ title: String, detail: String, offerInvite: Bool = false) -> some View {
         VStack(spacing: 16) {
             Spacer()
             Text(title).font(Atlas.Font.serif(26)).foregroundColor(Atlas.ink)
             Text(detail).font(Atlas.Font.sans(14)).foregroundColor(Atlas.ink2).multilineTextAlignment(.center)
+            if offerInvite {
+                Button("Invite someone") { showCirclePicker = true }.foregroundStyle(Atlas.burnt)
+            }
             Button("Refresh") { reloadID = UUID() }.foregroundColor(Atlas.burnt)
             Spacer(minLength: Atlas.listBottomPad)
         }.padding(.horizontal, Atlas.screenHPad)

@@ -3,6 +3,7 @@ import SwiftUI
 struct WishlistView: View {
     @Environment(AppState.self) private var appState
     @State private var showCirclePicker   = false
+    @State private var showJoinCircle = false
     @State private var showAddRestaurant  = false
     @State private var showBulkImport     = false
     @State private var showFilter         = false
@@ -15,7 +16,7 @@ struct WishlistView: View {
             if appState.isLoadingAuth {
                 ProgressView().tint(Atlas.burnt)
             } else if appState.activeCircle == nil {
-                NoCircleView(showNewCircle: $showCirclePicker)
+                NoCircleView(showNewCircle: $showCirclePicker, showJoinCircle: $showJoinCircle)
             } else {
                 wishlistContent
             }
@@ -39,6 +40,9 @@ struct WishlistView: View {
         .sheet(isPresented: $showAddRestaurant) {
             AddRestaurantView(isPresented: $showAddRestaurant)
                 .presentationCornerRadius(Atlas.sheetTopRadius)
+        }
+        .sheet(isPresented: $showJoinCircle) {
+            JoinCircleSheet().presentationCornerRadius(Atlas.sheetTopRadius)
         }
         .sheet(isPresented: $showBulkImport) {
             BulkImportView(isPresented: $showBulkImport)
@@ -123,6 +127,7 @@ struct WishlistView: View {
 
 private struct NoCircleView: View {
     @Binding var showNewCircle: Bool
+    @Binding var showJoinCircle: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -156,6 +161,10 @@ private struct NoCircleView: View {
                     .clipShape(Capsule())
             }
             .padding(.horizontal, Atlas.screenHPad)
+
+            Button("Join a circle") { showJoinCircle = true }
+                .font(Atlas.Font.sans(15, weight: .semibold))
+                .foregroundStyle(Atlas.burnt).padding(.top, 20)
 
             Spacer()
         }

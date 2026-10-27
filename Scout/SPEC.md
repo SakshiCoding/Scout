@@ -144,6 +144,7 @@ Backend note: Supabase migrations live in `supabase/migrations/`. Circle and res
 - [ ] ScoutWidget (WidgetKit)
 - [x] Siri Shortcuts — open wishlist, shared picker, and journal using foreground App Intents
 - [x] App icon + branding assets — Atlas compass/fork, light/dark/tinted iOS icons, shared vector mark
+- [x] Circle invitations — seven-day links/codes, explicit joining, replacement/revocation, and real membership snapshots
 - [ ] Performance + polish pass
 
 ---

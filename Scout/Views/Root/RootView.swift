@@ -6,6 +6,22 @@ struct RootView: View {
     @State private var wishlistNavigationID = UUID()
     @State private var journalNavigationID = UUID()
 
+    private enum IncomingSheet: Identifiable {
+        case restaurant(SharedRestaurantImport), invitation(CircleInviteCode)
+        var id: UUID {
+            switch self {
+            case .restaurant(let payload): payload.id
+            case .invitation(let code): code.id
+            }
+        }
+    }
+    private var incomingSheet: IncomingSheet? {
+        guard appState.isAuthenticated, !appState.isPasswordRecovery else { return nil }
+        if let payload = appState.pendingSharedImport { return .restaurant(payload) }
+        if let code = appState.pendingCircleInvite { return .invitation(code) }
+        return nil
+    }
+
     var body: some View {
         Group {
             if appState.isLoadingAuth {
@@ -29,23 +45,29 @@ struct RootView: View {
         .onAppear {
             appState.loadPendingSharedImport()
         }
-        .sheet(
-            isPresented: Binding(
-                get: { appState.isAuthenticated && appState.pendingSharedImport != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        appState.clearPendingSharedImport()
-                    }
+        .sheet(item: Binding(get: { incomingSheet }, set: { value in
+            if value == nil {
+                switch incomingSheet {
+                case .restaurant: appState.clearPendingSharedImport()
+                case .invitation: appState.pendingCircleInvite = nil
+                case nil: break
                 }
-            )
-        ) {
-            if let pendingImport = appState.pendingSharedImport {
-                ImportReviewView(pendingImport: pendingImport)
+            }
+        })) { sheet in
+            switch sheet {
+            case .restaurant(let payload):
+                ImportReviewView(pendingImport: payload)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .presentationCornerRadius(Atlas.sheetTopRadius)
+            case .invitation(let code):
+                JoinCircleSheet(initialCode: code)
+                    .presentationCornerRadius(Atlas.sheetTopRadius)
             }
         }
+        .alert("Invalid invitation", isPresented: Binding(get: { appState.invitationLinkError }, set: { appState.invitationLinkError = $0 })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text("Ask for a new Scout invitation link, or paste the code in Join a circle.") }
         .fullScreenCover(isPresented: Binding(
             get: { appState.isPasswordRecovery },
             set: { appState.isPasswordRecovery = $0 }
