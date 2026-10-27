@@ -6,10 +6,17 @@
 //
 
 import SwiftUI
+import AppIntents
 
 @main
 struct ScoutApp: App {
-    @State private var appState = AppState()
+    @State private var appState: AppState
+
+    init() {
+        let state = AppState()
+        _appState = State(initialValue: state)
+        AppDependencyManager.shared.add(dependency: state)
+    }
 
     var body: some Scene {
         WindowGroup {

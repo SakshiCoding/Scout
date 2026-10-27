@@ -4,6 +4,7 @@ struct RootView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedTab: TabItem = .list
     @State private var wishlistNavigationID = UUID()
+    @State private var journalNavigationID = UUID()
 
     var body: some View {
         Group {
@@ -21,6 +22,7 @@ struct RootView: View {
             if let tab {
                 selectedTab = tab
                 if tab == .list { wishlistNavigationID = UUID() }
+                if tab == .journal { journalNavigationID = UUID() }
                 appState.requestedTab = nil
             }
         }
@@ -114,7 +116,7 @@ struct RootView: View {
         case .list:    WishlistView().id(wishlistNavigationID)
         case .map:     MapView()
         case .pick:    PickerView()
-        case .journal: JournalIndexView { selectedTab = .list }
+        case .journal: JournalIndexView { selectedTab = .list }.id(journalNavigationID)
         }
     }
 

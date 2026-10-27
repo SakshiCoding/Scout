@@ -1,9 +1,5 @@
 import SwiftUI
 
-enum TabItem: String, CaseIterable {
-    case list, map, pick, journal
-}
-
 struct CustomTabBar: View {
     @Binding var selected: TabItem
 

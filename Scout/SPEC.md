@@ -142,7 +142,7 @@ Backend note: Supabase migrations live in `supabase/migrations/`. Circle and res
 - [ ] GeminiService (Google Gemini API caption parsing)
 - [ ] TikTok link stored on card
 - [ ] ScoutWidget (WidgetKit)
-- [ ] Siri Shortcut
+- [x] Siri Shortcuts — open wishlist, shared picker, and journal using foreground App Intents
 - [ ] App icon + branding assets
 - [ ] Performance + polish pass
 

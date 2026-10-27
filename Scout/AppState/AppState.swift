@@ -32,7 +32,7 @@ final class AppState {
     private var pendingMediaIds: Set<UUID> = []
     private var journalLoadRequestId = UUID()
 
-    // Widget deep links use the existing tab shell, including a cold launch through auth.
+    // Widgets and App Intents use the existing tab shell, including cold launches through auth.
     var requestedTab: TabItem?
 
     // MARK: - Wishlist UI state
@@ -294,12 +294,12 @@ final class AppState {
     }
 
     func handleOpenURL(_ url: URL) {
+        if let destination = ScoutDestination(url: url) {
+            navigate(to: destination)
+            return
+        }
         guard url.scheme == "scout" else { return }
         switch url.host {
-        case "wishlist":
-            activeTab = .wantToTry
-            filterState.reset()
-            requestedTab = .list
         case "import-pending":
             loadPendingSharedImport()
         case "password-reset":
@@ -646,39 +646,4 @@ struct JournalLocationSummary: Identifiable {
     var id: UUID { restaurant.id }
     var photoCount: Int { media.filter { $0.mediaType == .photo }.count }
     var videoCount: Int { media.filter { $0.mediaType == .video }.count }
-}
-
-// MARK: - Supporting types
-
-enum WishlistTab {
-    case wantToTry, visited
-}
-
-struct FilterState {
-    var cuisine: String?
-    var priceTiers: Set<Restaurant.PriceTier> = []
-    var vibeTags: Set<String> = []
-    var maxDistanceMiles: Double?
-
-    var isActive: Bool {
-        cuisine != nil || !priceTiers.isEmpty || !vibeTags.isEmpty || maxDistanceMiles != nil
-    }
-
-    func matches(_ r: Restaurant) -> Bool {
-        if let cuisine, r.cuisine?.lowercased() != cuisine.lowercased() { return false }
-        if !priceTiers.isEmpty, let tier = r.priceTier,
-           !priceTiers.contains(tier) { return false }
-        if !vibeTags.isEmpty,
-           vibeTags.isDisjoint(with: Set(r.vibeTags)) { return false }
-        if let maxDist = maxDistanceMiles, let dist = r.distanceMiles,
-           dist > maxDist { return false }
-        return true
-    }
-
-    mutating func reset() {
-        cuisine           = nil
-        priceTiers        = []
-        vibeTags          = []
-        maxDistanceMiles  = nil
-    }
 }
