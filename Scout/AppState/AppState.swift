@@ -9,7 +9,11 @@ final class AppState {
     // MARK: - Auth
     var currentUser: User?
     var isAuthenticated = false { didSet {
-        if !isAuthenticated { resetPickState(); invalidateRestaurantLoads() }
+        if !isAuthenticated {
+            resetPickState()
+            invalidateRestaurantLoads()
+            mediaService.clearThumbnails()
+        }
         publishWidgetSnapshot()
     } }
     var isLoadingAuth   = true
