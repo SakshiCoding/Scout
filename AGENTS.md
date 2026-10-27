@@ -8,7 +8,7 @@ Scout is a shared restaurant wishlist iOS app organized around **circles** — n
 
 ## Current State
 
-The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, server-authoritative circle matching (deployed to Scout), and Siri/App Shortcuts navigation are implemented.
+The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, server-authoritative circle matching (deployed to Scout), Siri/App Shortcuts navigation, and Atlas app icons/shared branding assets are implemented.
 
 | File | Status |
 |------|--------|
@@ -23,11 +23,14 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results, enrichment hints (expanded cuisine mapping: 25 types including Seafood, Steakhouse, BBQ, Spanish, Middle Eastern, Brazilian, Indonesian, Lebanese, Turkish; vibe hints from fine dining, fast food, brunch, sports bar types), and Google website/phone contact details |
 | `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Services/GeminiService.swift` | Google Gemini API client foundation for structured restaurant extraction from shared TikTok/Instagram/social text; reads `GEMINI_API_KEY`/`GEMINI_MODEL`, requests JSON output, normalizes restaurant name, city/neighborhood, cuisine, establishment type, price tier, vibe tags, note, and confidence; includes conservative name/address-based cuisine and canonical vibe suggestions with confidence gating |
+| `Scout/Views/Shared/ScoutBrandMark.swift` | Shared decorative vector compass/fork mark used by sign-in, first-circle, and auth-loading screens; Atlas tint and existing layout preserved |
+| `Scout/Assets.xcassets/` + `Branding/` | iOS light/dark/tinted app icons, vector compass PDF/SVG, Atlas accent color, preview contact sheet, and branding/regeneration guide |
+| `Scripts/generate-brand-assets.swift` + `Tests/validate-brand-assets.swift` | Native Core Graphics asset generation and checks for icon slots, dimensions, transparency, exact sRGB palette, grayscale tint, vector configuration, and compiled bundle icon packaging |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Models/SharedRestaurantImport.swift` | Shared app/extension import payload + App Group storage for pending restaurant/social shares |
-| `Scout/Views/Root/RootView.swift` | Auth gate, custom tab shell, shared import sheet host, debug-only social import test button, and shortcut-driven list/journal navigation reset |
+| `Scout/Views/Root/RootView.swift` | Auth gate, custom tab shell, shared import sheet host, debug-only social import test button, and shortcut-driven list/journal navigation reset, and a shared Atlas compass on the loading screen |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
-| `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping and password-reset email action |
+| `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping, password-reset email action, and shared Atlas compass brand mark |
 | `Scout/Views/Auth/ResetPasswordView.swift` | Recovery-link destination for choosing and saving a new password |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows; add form automatically requests Gemini cuisine/vibe suggestions for generic Places results and offers a manual suggestion button, preserving user edits and rejecting stale responses |
 | `Tests/` | Credential-free Gemini, widget, and shared-pick regression harnesses; `run-pick-tests.sh` runs the matching migrations in PGlite Postgres with multiple auth identities, then decodes its snapshot in Swift; opt-in hosted Auth/PostgREST/Realtime checks are in `Tests/database/hosted-partner-matching.test.mjs`; see `Tests/README.md` |
@@ -236,6 +239,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 13 | `ResetPasswordView` | — | Implemented | Full-screen password recovery form opened by Supabase email links through `scout://password-reset` |
 | 14 | `ScoutWidgetView` | Home Screen | Implemented | Small widget shows the newest saved place; medium shows up to three, with active circle and total wishlist count; handles sign-in/no-circle/empty/stale states and opens the existing List tab |
 | 15 | `ScoutShortcuts` | Siri / Shortcuts | Implemented | Three discoverable actions open the existing wishlist, Pick, or journal index; wishlist resets filters, journal resets its navigation stack, and signed-out launches keep the sign-in gate |
+| 16 | `ScoutBrandMark` + app icon | Auth / Home Screen | Implemented | Atlas compass with fork motif replaces the placeholder S on sign-in/first-circle/loading; light, dark, and tinted iOS icons use the same geometry |
 
 ### Key layout rules across all screens
 
@@ -301,7 +305,7 @@ Phase 1 verified behavior:
 - [x] Gemini cuisine + vibe autofill from restaurant name (AddRestaurantView: automatic fallback for generic Places cuisine, optional manual name/address suggestions, confidence threshold, canonical vibe labels, user-edit protection, cancellation/stale-response guards, and nonblocking manual fallback)
 - [x] ScoutWidget (WidgetKit: small/medium active-circle wishlist, shared App Group snapshot, change-driven reloads, sign-out cleanup, 24-hour stale state, and wishlist deep link)
 - [x] Siri Shortcuts (App Intents: open active-circle wishlist, shared picker, and journal; foreground/auth-gated navigation with no automatic votes or writes)
-- [ ] App icon + branding assets
+- [x] App icon + branding assets (Atlas compass/fork, light/dark/tinted iOS icons, shared vector sign-in/first-circle/loading mark, exact sRGB accent, portable SVG and regeneration guide)
 - [ ] Performance + polish pass
 
 Name-based suggestions require `GEMINI_API_KEY` in the ignored `Scout/Config.xcconfig` (existing `GEMINI_MODEL` setting is reused). They fill only empty cuisine and add canonical vibes; specific Places cuisine and user choices take precedence. No key hides the suggestion control. Unknown businesses, low confidence, and API errors leave the form usable, and Save never waits for suggestions. Suggestions apply only in the add form; bulk import and existing saved restaurants are unchanged.
@@ -333,6 +337,16 @@ Validation applies the actual migrations in isolated PGlite Postgres with distin
 Wishlist navigation selects want-to-try, clears filters, and returns to the list root (including the existing widget link). Journal navigation returns to its index even from a pushed scrapbook screen. Picker/journal navigation preserves wishlist filters. `scout://pick` and `scout://journal` use the same typed routing; password-reset and import-pending links keep their existing handlers. No new Siri entitlement, database migration, credential sharing, or extension target is needed.
 
 `Tests/run-shortcut-tests.sh` runs the production intents with a service-free injected state fixture, production navigation extension, filters, and destination models. It checks the three foreground actions, routing, repeated requests, wishlist reset, filter preservation, widget compatibility, and auth/import link isolation. A signed iOS Simulator build and compiled metadata checks verify all three discoverable intents and shortcut tiles. In Apple's Shortcuts app on Simulator, all three actions launched Scout; a cold journal launch retained its destination through real test-account sign-in, the picker opened without votes/matches, and repeated wishlist execution restored want-to-try from Visited. Disposable hosted fixtures were removed afterward. Full Siri speech recognition and physical-device discovery require the walkthrough in `Tests/README.md`.
+
+---
+
+### Atlas app icon and branding assets
+
+The icon extends the approved Atlas `ScoutCompass` in the design mockups: a fork pointing north, compass ring/rays, and inner diamond. `Scripts/generate-brand-assets.swift` generates the 1024px iOS light, dark, and tinted PNGs, a portable `Branding/ScoutCompass.svg`, the `ScoutCompass` vector-template PDF image set, `Branding/Preview.png`, and the asset-catalog AccentColor. Explicit sRGB colors preserve paper `#F7F1E6` and burnt orange `#CC5500`. Light is opaque, dark has a transparent background for the system surface, and tinted is opaque grayscale. Source icons have square corners; the OS masks them.
+
+`ScoutBrandMark` replaces the placeholder S on sign-in, first-circle, and auth-loading screens using the same vector shape and Atlas tint. It is decorative to avoid repeating the adjacent accessible Scout heading. Existing typography, spacing, auth behavior, navigation shell, and package dependencies are preserved. Existing unused Mac icon slots remain empty; no Icon Composer/Liquid Glass layers are claimed.
+
+`swift Tests/validate-brand-assets.swift` checks asset dimensions/slots, alpha, exact palette pixels, grayscale tint, and vector configuration. Passing a built Scout.app path also checks its icon declaration and compiled renditions. A signed iOS 26.4 Simulator build passed, with visual checks of sign-in and default/dark/tinted Home Screen icons. The decorative mark is absent from the accessibility tree, leaving the adjacent heading. Existing shortcut/widget regressions verify packaging compatibility; see `Branding/README.md` and `Tests/README.md` for generation and release walkthroughs.
 
 ---
 

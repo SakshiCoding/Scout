@@ -20,18 +20,7 @@ struct SignInView: View {
                 VStack(spacing: 0) {
                     Spacer().frame(height: 80)
 
-                    // Compass mark
-                    ZStack {
-                        Circle()
-                            .stroke(Atlas.burnt.opacity(0.15), lineWidth: 1.5)
-                            .frame(width: 72, height: 72)
-                        Circle()
-                            .stroke(Atlas.burnt.opacity(0.08), lineWidth: 1)
-                            .frame(width: 90, height: 90)
-                        Text("S")
-                            .font(Atlas.Font.serif(44))
-                            .foregroundColor(Atlas.burnt)
-                    }
+                    ScoutBrandMark(size: 90)
 
                     Spacer().frame(height: 32)
 

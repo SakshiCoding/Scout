@@ -128,17 +128,7 @@ private struct NoCircleView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            ZStack {
-                Circle()
-                    .stroke(Atlas.burnt.opacity(0.12), lineWidth: 1.5)
-                    .frame(width: 80, height: 80)
-                Circle()
-                    .stroke(Atlas.burnt.opacity(0.06), lineWidth: 1)
-                    .frame(width: 100, height: 100)
-                Text("S")
-                    .font(Atlas.Font.serif(48))
-                    .foregroundColor(Atlas.burnt)
-            }
+            ScoutBrandMark(size: 100)
 
             Spacer().frame(height: 32)
 
