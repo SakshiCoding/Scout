@@ -8,11 +8,14 @@ Scout is a shared restaurant wishlist iOS app organized around **circles** — n
 
 ## Current State
 
-The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, and server-authoritative circle matching are implemented (shared matching is deployed to Scout).
+The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-complete. Phase 2 now includes Places enrichment, the map, visited logging, and the first journal slice. Phase 3 has started with the Safari/Apple Maps share-import backbone and Gemini social parsing: SwiftUI app structure, shared state, Supabase integration, authentication, circle switching, wishlist UI, manual restaurant add, bulk import, filters, Atlas design-system helpers, visit records, journal loading, journal browsing, share capture, import review, `GeminiService`, TikTok/Instagram/social import autofill, optional name-based cuisine/vibe suggestions in the add form, the first Scout Home Screen widget, server-authoritative circle matching (deployed to Scout), and Siri/App Shortcuts navigation are implemented.
 
 | File | Status |
 |------|--------|
-| `Scout/ScoutApp.swift` | App entry point; creates and injects `AppState` |
+| `Scout/ScoutApp.swift` | App entry point; creates and injects one `AppState` into SwiftUI and App Intents dependencies |
+| `Scout/Intents/ScoutShortcuts.swift` | Three foreground Siri/App Shortcuts: open wishlist, open shared picker, and open journal; routes through the existing AppState/auth gate |
+| `Scout/Models/ScoutDestination.swift` + `Scout/AppState/AppState+Navigation.swift` | Shared typed destinations/tab enum and navigation for shortcuts and `scout://wishlist`, `scout://pick`, `scout://journal` links |
+| `Scout/Models/WishlistFilter.swift` | Existing wishlist tab/filter types, moved unchanged from AppState for reuse and credential-free navigation tests |
 | `Scout/AppState/AppState.swift` | Main app state for auth, circles, restaurants, filtering, visits, media, journal summaries, services, Google Place detail refreshes, shared import state/debug fixtures, shared pick state (`pickSession`, `observePickSession`, `sendPickAction`, derived `activePickMatch`), scoped Realtime observation, and stale-response guards, widget snapshot publishing, sign-out cleanup, and wishlist widget links |
 | `Scout/Services/SupabaseService.swift` | Supabase client and core circle/restaurant/visit/media/profile/pick methods; persists Google Place IDs, includes journal reads, private storage downloads, and the checked `sharedPick` RPC for shared decks, votes, undo, rematches, and authoritative matches |
 | `Scout/Services/AuthService.swift` | Auth session handling, email/Apple sign-in, password-reset email requests, recovery callback sessions, and password updates |
@@ -22,7 +25,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Services/GeminiService.swift` | Google Gemini API client foundation for structured restaurant extraction from shared TikTok/Instagram/social text; reads `GEMINI_API_KEY`/`GEMINI_MODEL`, requests JSON output, normalizes restaurant name, city/neighborhood, cuisine, establishment type, price tier, vibe tags, note, and confidence; includes conservative name/address-based cuisine and canonical vibe suggestions with confidence gating |
 | `Scout/Theme/AtlasTheme.swift` | Direction A "Atlas" colors, typography, layout constants, and shadows |
 | `Scout/Models/SharedRestaurantImport.swift` | Shared app/extension import payload + App Group storage for pending restaurant/social shares |
-| `Scout/Views/Root/RootView.swift` | Auth gate, custom tab shell, shared import sheet host, and debug-only social import test button |
+| `Scout/Views/Root/RootView.swift` | Auth gate, custom tab shell, shared import sheet host, debug-only social import test button, and shortcut-driven list/journal navigation reset |
 | `Scout/Views/Root/CustomTabBar.swift` | Floating custom tab bar; do not replace with SwiftUI `TabView` |
 | `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping and password-reset email action |
 | `Scout/Views/Auth/ResetPasswordView.swift` | Recovery-link destination for choosing and saving a new password |
@@ -232,6 +235,7 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 | 12 | `ImportReviewView` | — | Implemented | Main-app review sheet launched from the Share Extension or debug simulator test hook; confirms Safari/Apple Maps/Google Maps/TikTok/Instagram imports, uses Gemini to prefill social restaurant hints, chooses circle, matches Google/Apple Places results, keeps manual name edits, and saves to wishlist even when no exact match is found |
 | 13 | `ResetPasswordView` | — | Implemented | Full-screen password recovery form opened by Supabase email links through `scout://password-reset` |
 | 14 | `ScoutWidgetView` | Home Screen | Implemented | Small widget shows the newest saved place; medium shows up to three, with active circle and total wishlist count; handles sign-in/no-circle/empty/stale states and opens the existing List tab |
+| 15 | `ScoutShortcuts` | Siri / Shortcuts | Implemented | Three discoverable actions open the existing wishlist, Pick, or journal index; wishlist resets filters, journal resets its navigation stack, and signed-out launches keep the sign-in gate |
 
 ### Key layout rules across all screens
 
@@ -296,7 +300,7 @@ Phase 1 verified behavior:
 - [x] GeminiService (Google Gemini API — structured JSON caption parsing from TikTok/social)
 - [x] Gemini cuisine + vibe autofill from restaurant name (AddRestaurantView: automatic fallback for generic Places cuisine, optional manual name/address suggestions, confidence threshold, canonical vibe labels, user-edit protection, cancellation/stale-response guards, and nonblocking manual fallback)
 - [x] ScoutWidget (WidgetKit: small/medium active-circle wishlist, shared App Group snapshot, change-driven reloads, sign-out cleanup, 24-hour stale state, and wishlist deep link)
-- [ ] Siri Shortcut
+- [x] Siri Shortcuts (App Intents: open active-circle wishlist, shared picker, and journal; foreground/auth-gated navigation with no automatic votes or writes)
 - [ ] App icon + branding assets
 - [ ] Performance + polish pass
 
@@ -319,6 +323,16 @@ Client writes wait for acknowledgement. Realtime session-revision changes trigge
 Both new tables have circle-member SELECT policies; client table writes are revoked. The public RPC is security invoker and delegates to a non-exposed `scout_private` function with an empty search path, explicit `auth.uid()`/membership checks, ordered self-votes, and transaction-level per-circle locking. No caller-supplied user ID is accepted. The migration adds `pick_sessions` to `supabase_realtime` when that publication exists.
 
 Validation applies the actual migrations in isolated PGlite Postgres with distinct authenticated identities and RLS/forged-write tests, followed by Swift decoding/projection tests. Hosted verification used three disposable Auth accounts, a dedicated circle, real PostgREST requests, and an authenticated WebSocket: canonical decks, acknowledged votes, undo, persistence, concurrent unanimous matching/rematches, stale HTTP 409 responses, disagreement, outsider isolation, and forged/anonymous write denial passed. Test fixtures were removed afterward. A signed Simulator build passed; physical two-device interaction remains a manual check. The opt-in hosted harness and walkthrough are documented in `Tests/README.md`.
+
+---
+
+### Siri and App Shortcuts behavior and verification
+
+`ScoutShortcuts` publishes “Open my wishlist in Scout,” “Pick a restaurant in Scout,” and “Open my journal in Scout,” plus matching “Show”/“Help me pick” phrases. All three intents foreground the app and resolve the same `AppState` instance registered by `ScoutApp` with `AppDependencyManager`. They select the active circle's existing screens without declaring matches, casting votes, creating restaurants, or returning private restaurant data to Siri. Signed-out launches show the normal auth gate and retain the requested tab for after sign-in; circles continue using the existing restore flow.
+
+Wishlist navigation selects want-to-try, clears filters, and returns to the list root (including the existing widget link). Journal navigation returns to its index even from a pushed scrapbook screen. Picker/journal navigation preserves wishlist filters. `scout://pick` and `scout://journal` use the same typed routing; password-reset and import-pending links keep their existing handlers. No new Siri entitlement, database migration, credential sharing, or extension target is needed.
+
+`Tests/run-shortcut-tests.sh` runs the production intents with a service-free injected state fixture, production navigation extension, filters, and destination models. It checks the three foreground actions, routing, repeated requests, wishlist reset, filter preservation, widget compatibility, and auth/import link isolation. A signed iOS Simulator build and compiled metadata checks verify all three discoverable intents and shortcut tiles. In Apple's Shortcuts app on Simulator, all three actions launched Scout; a cold journal launch retained its destination through real test-account sign-in, the picker opened without votes/matches, and repeated wishlist execution restored want-to-try from Visited. Disposable hosted fixtures were removed afterward. Full Siri speech recognition and physical-device discovery require the walkthrough in `Tests/README.md`.
 
 ---
 

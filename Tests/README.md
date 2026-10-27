@@ -110,3 +110,30 @@ Two-device walkthrough after deployment:
 - With only one member, show the invitation guidance and never produce a match. With no candidates, show the empty-wishlist state. Mark a deck restaurant visited/delete it or advance the server's UTC day to verify invalidation.
 
 Hosted Auth/PostgREST/Realtime checks and a signed Simulator build passed. Physical two-device UI interaction, provisioning, and connectivity gestures remain manual checks; the hosted harness does not claim to exercise those UI paths.
+
+
+## Siri / App Shortcuts
+
+```sh
+Tests/run-shortcut-tests.sh
+```
+
+The harness compiles the production App Intents, typed routes, navigation extension, and filter models. It injects a service-free AppState fixture for direct `perform()` calls (Apple's dependency injection flow does not run when calling this method directly). It verifies three foreground actions, intended tabs, repeated requests, wishlist reset, filter preservation, and URL routing that leaves auth/import links with their existing handlers. It does not test live AppDependencyManager resolution, auth lifecycle, speech recognition, or the Shortcuts UI.
+
+A signed Simulator build passed with three discoverable foreground intents, three tiles, and six extracted phrases. To validate the compiled artifact too, pass its metadata file:
+
+```sh
+Tests/run-shortcut-tests.sh /tmp/scout-derived/Build/Products/Debug-iphonesimulator/Scout.app/Metadata.appintents/extract.actionsdata
+```
+
+Simulator walkthrough completed October 26, 2026: all three actions appeared in Apple's Shortcuts app and launched Scout through the normal sign-in gate. A cold journal action retained its destination through a real disposable-account sign-in. Authenticated picker/wishlist actions opened the correct screens, the picker created zero votes/matches, and repeated wishlist execution restored want-to-try from Visited. The hosted fixture account, circle, restaurant, and pick session were removed afterward. The test account's password was not saved in Passwords.
+
+Physical-device walkthrough:
+
+1. Install and open Scout, then find Scout under App Shortcuts in Apple's Shortcuts app. Expect Open wishlist, Pick a restaurant, and Open journal.
+2. Run each action while Scout is open and from a terminated launch. Each action should foreground the existing screen for the active/restored circle. Signed-out launches must show sign-in before displaying circle data and continue to the requested section after sign-in.
+3. In the wishlist select Visited, apply filters, and open a restaurant. Run Open wishlist: return to the want-to-try list root with filters cleared. Repeat the same action.
+4. Push a restaurant scrapbook from Journal, then run Open journal: return to the journal index. Opening Pick or Journal should preserve wishlist filters.
+5. Run Pick a restaurant with two members and verify it only opens the shared round; it must not submit a vote, declare a match, or reset an existing round.
+6. Try “Open my wishlist in Scout,” “Pick a restaurant in Scout,” and “Open my journal in Scout” with Siri on a physical device. Speech recognition, Siri language/settings, and indexing are system-controlled and are not verified by the command-line harness.
+7. Confirm the widget's `scout://wishlist`, share extension's import handoff, and password-reset callback continue to work. `scout://pick` and `scout://journal` are additional navigation links.
