@@ -26,6 +26,7 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Tests/run-invitation-tests.sh` + `Tests/database/hosted-circle-invitations.test.mjs` | Real migration/pgcrypto permission and lifecycle tests, Swift parser/SQL decoding tests, and opt-in hosted Auth/PostgREST/concurrency integration checks |
 | `Scout/Services/AuthService.swift` | Auth session handling, email/Apple sign-in, password-reset email requests, recovery callback sessions, and password updates |
 | `Scout/Services/LocationService.swift` | Location permissions, tap-triggered current-location requests, immediate post-authorization location refresh, and distance sorting |
+| `Scout/AppState/AppState+RestaurantLoading.swift` + `Scout/Services/RestaurantEnrichment.swift` | Saved restaurants publish before optional Places refresh; at most three detail requests per refresh run concurrently, preserving order/fallbacks. Request/user/circle/revision guards protect local changes and reject stale responses; scope changes clear the previous circle and stop scheduling old refresh work. |
 | `Scout/Services/PlacesService.swift` | Google Places Text Search (New) with Apple local-search fallback; returns Scout-owned place results, enrichment hints (expanded cuisine mapping: 25 types including Seafood, Steakhouse, BBQ, Spanish, Middle Eastern, Brazilian, Indonesian, Lebanese, Turkish; vibe hints from fine dining, fast food, brunch, sports bar types), and Google website/phone contact details |
 | `Scout/Services/GoogleMapsConfiguration.swift` | Configures Google Maps SDK from the shared Maps Platform API key |
 | `Scout/Services/GeminiService.swift` | Google Gemini API client foundation for structured restaurant extraction from shared TikTok/Instagram/social text; reads `GEMINI_API_KEY`/`GEMINI_MODEL`, requests JSON output, normalizes restaurant name, city/neighborhood, cuisine, establishment type, price tier, vibe tags, note, and confidence; includes conservative name/address-based cuisine and canonical vibe suggestions with confidence gating |
@@ -40,7 +41,8 @@ The project is **not** a bare SwiftUI shell anymore. Phase 1 is foundation-compl
 | `Scout/Views/Auth/SignInView.swift` | Apple/email authentication with friendly error mapping, password-reset email action, and shared Atlas compass brand mark |
 | `Scout/Views/Auth/ResetPasswordView.swift` | Recovery-link destination for choosing and saving a new password |
 | `Scout/Views/Wishlist/` | Wishlist, add restaurant, bulk import, filters, and restaurant rows; add form automatically requests Gemini cuisine/vibe suggestions for generic Places results and offers a manual suggestion button, preserving user edits and rejecting stale responses |
-| `Tests/` | Credential-free Gemini, widget, and shared-pick regression harnesses; `run-pick-tests.sh` runs the matching migrations in PGlite Postgres with multiple auth identities, then decodes its snapshot in Swift; opt-in hosted Auth/PostgREST/Realtime checks are in `Tests/database/hosted-partner-matching.test.mjs`; see `Tests/README.md` |
+| `Tests/run-restaurant-loading-tests.sh` + `Tests/RestaurantLoadingTests.swift` | Deferred-service regressions for the production loader/scheduler: early saved-data publication, bounded concurrency, edit-safe merges, stale scopes, failures, and cancellation |
+| `Tests/` | Credential-free restaurant-loading, Gemini, widget, and shared-pick regression harnesses; `run-pick-tests.sh` runs the matching migrations in PGlite Postgres with multiple auth identities, then decodes its snapshot in Swift; opt-in hosted Auth/PostgREST/Realtime checks are in `Tests/database/hosted-partner-matching.test.mjs`; see `Tests/README.md` |
 | `Scout/Views/Import/ImportReviewView.swift` | Main-app import review sheet for shared Safari/Apple Maps/Google Maps/TikTok/Instagram places: circle selection, Gemini-powered social text prefill, Places match suggestions, manual fallback when no match is found, note, and save |
 | `Scout/Views/Detail/RestaurantDetailView.swift` | Detail screen: hero placeholder, title, stat row, note, vibe tags, edit sheet, mark visited button, visited-journal shortcut, and reservation/contact actions |
 | `Scout/Views/Detail/MarkVisitedSheet.swift` | Lightweight post-visit bottom sheet: circle kicker, restaurant heading, 1–5 star rating, photo picker, italic note field, Save/Skip CTAs |
@@ -232,10 +234,10 @@ Some Phase 1 screens are already implemented or partially implemented. Full spec
 
 | # | View name | Tab | Status | Purpose |
 |---|-----------|-----|--------|---------|
-| 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; add flow uses Google Places search and persists Place IDs when configured; Gemini fills cuisine/vibe gaps for generic results, with editable suggestions and a manual name-based action; the first-circle empty state also offers Join a circle |
+| 1 | `WishlistView` | List | Implemented/active | Home — group's restaurant wishlist sorted by distance; saved data appears before Places detail refresh, and failed refreshes retain loaded places; add flow uses Google Places search and persists Place IDs when configured; Gemini fills cuisine/vibe gaps for generic results, with editable suggestions and a manual name-based action; the first-circle empty state also offers Join a circle |
 | 2 | `RestaurantDetailView` | — | Implemented (Phase 2 partial) | Hero placeholder, name, cuisine, price, stats, notes, vibe tags, edit sheet, mark visited, visited-journal shortcut, OpenTable/Resy search links, and Google website/phone actions when available |
 | 3 | `PickerView` + `MatchView` | Pick | Implemented / hosted verified | All members share one server-created deck of up to three places. A match requires yes from every round participant (minimum two); actual member progress syncs via Realtime with polling recovery. Votes/matches resume on reopen; undo is allowed before a match; shared rematches are serialized. No simulated partner or UserDefaults match fallback. |
-| 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, tap-triggered user location, and filter wiring |
+| 4 | `MapView` | Map | Implemented | Full-bleed Google map with custom Atlas pins, glass header, bottom peek card, tap-triggered user location, and filter wiring; saved pins appear before bounded Places detail refresh |
 | 5 | `CirclePickerSheet` | — | Implemented/active | Bottom sheet — switch circles, view refreshed member avatars, invite to the active circle, or join another |
 | 6 | `JournalIndexView` | Journal | Implemented/active | Table of contents for visited restaurants, enriched with real visit/media stats, recent-first rows, circle switching, and blank-polaroid empty state |
 | 7 | `JournalLocationView` | — | Implemented | Per-restaurant scrapbook with visit dates, occasion labels, photo polaroid clusters, notes, empty state, compose action, destructive entry deletion, and moving a place back to the wishlist |
@@ -317,11 +319,22 @@ Phase 1 verified behavior:
 - [x] Siri Shortcuts (App Intents: open active-circle wishlist, shared picker, and journal; foreground/auth-gated navigation with no automatic votes or writes)
 - [x] App icon + branding assets (Atlas compass/fork, light/dark/tinted iOS icons, shared vector sign-in/first-circle/loading mark, exact sRGB accent, portable SVG and regeneration guide)
 - [x] Circle invitations (member-managed seven-day link/code, hash-only storage, auth-gated preview and explicit join, replacement/revocation, real member snapshots, and shared-picker participant refresh)
-- [ ] Performance + polish pass
+- [x] Wishlist loading performance slice (saved rows before Places, three-request concurrency limit, stable fallback/order, edit-safe merges, circle/auth/cancellation guards, and refresh-failure preservation)
+- [ ] Remaining performance + polish pass (physical-device profiling, large media journals, and release walkthrough)
 
 Name-based suggestions require `GEMINI_API_KEY` in the ignored `Scout/Config.xcconfig` (existing `GEMINI_MODEL` setting is reused). They fill only empty cuisine and add canonical vibes; specific Places cuisine and user choices take precedence. No key hides the suggestion control. Unknown businesses, low confidence, and API errors leave the form usable, and Save never waits for suggestions. Suggestions apply only in the add form; bulk import and existing saved restaurants are unchanged.
 
 Verification: `Tests/run-metadata-tests.sh` exercises the production service with mocked URLSession responses (request schema/address context, canonical tags, low confidence, generic metadata, missing key, cancellation, HTTP/malformed-response errors, and social-parser regression). The harness needs no API key or Supabase access. UI walkthrough checks are documented in `Tests/README.md`.
+
+---
+
+### Faster wishlist and map loading
+
+`loadRestaurants` now publishes the database result and updates circle counts before Google detail enrichment. The wishlist spinner ends at that point; saved coordinates can draw map pins while current Google details refresh. `RestaurantEnrichment` keeps at most three Places requests per refresh in flight, skips manual places, preserves saved order and data when a detail request fails, and stops scheduling work after cancellation or a scope change. Already-started SDK requests may finish after invalidation; no additional requests are scheduled for that refresh. Google details remain transient in memory; this adds no persistent Places cache or schema change.
+
+Each load captures the user, circle, request identity, and local restaurant revision. An older fetch cannot override a newer request or a confirmed local write. Delayed enrichment merges only unchanged rows, preserving edits, visit status, notes, additions, and deletions. Circle changes clear the old list immediately and invalidate requests, including A → B → A switches; sign-out also invalidates loading. A temporary database refresh failure retains previously loaded rows. The journal's optimistic visit/media reconciliation is unchanged.
+
+`Tests/run-restaurant-loading-tests.sh` compiles the production loading extension, enrichment scheduler, and restaurant model with deferred service fixtures. It verifies first publication before any Places completion, the three-request bound, out-of-order results, fallback/order/counts, concurrent writes, overlapping refresh ownership, failure preservation, user/circle/sign-out isolation, invalidated round trips, cancellation, and stopped scheduling. This measures behavior deterministically rather than claiming a device latency benchmark. The signed Simulator build verifies integration with the actual Supabase/Google SDKs; physical-device profiling remains in the polish checklist.
 
 ---
 

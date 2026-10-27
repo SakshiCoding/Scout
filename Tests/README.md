@@ -204,3 +204,15 @@ Device walkthrough:
 6. Verify share-import review and password recovery still have their dedicated routes. A new valid invite opened during sign-in must remain pending; auth changes or late circle-list responses must not overwrite a confirmed join.
 
 Physical-device link sharing between apps and simultaneous UI use remain release checks. Custom-scheme links require Scout to be installed; this feature does not host a web landing page or install flow.
+
+## Faster wishlist and map loading
+
+Run the credential-free loading regression harness:
+
+```sh
+Tests/run-restaurant-loading-tests.sh
+```
+
+It compiles the production AppState loading extension, bounded enrichment scheduler, and restaurant model with deferred database/Places fixtures. Tests hold all Places responses to prove saved rows and circle counts publish first; finish details out of order to verify a maximum of three requests, stable ordering, manual-place skips, and failure fallbacks; then exercise edits, visit status/notes, adds/deletes, overlapping reads, temporary database failures, cancellation, and user/circle/auth changes. Invalidating a request also protects a circle A → B → A round trip. No hosted data, API keys, or live Places calls are required. The fixtures replace service/network lifecycles; the signed app build checks actual SDK integration.
+
+For a device walkthrough, use a circle with several Google-linked restaurants and a manual entry. Reopen the app: the saved list should appear after the database read, while map details finish refreshing. Confirm ordering is stable (distance sorting may legitimately change as coordinates improve). Edit, delete, or mark a place visited during a slow detail refresh and check that the confirmed change remains. Switch circles rapidly, including A → B → A, and sign out while refreshing; old rows must not reappear. With loaded data and a later failed database refresh, the list should remain available. This retains in-memory data through a refresh failure; it does not add a persistent offline database or guarantee cold-start access without a network. Physical-device latency/memory profiling remains a release check.

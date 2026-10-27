@@ -61,13 +61,13 @@ final class PlacesService {
         return await searchApple(query: trimmed, near: location)
     }
 
-    func enrichGoogleRestaurants(_ restaurants: [Restaurant]) async -> [Restaurant] {
-        var enriched: [Restaurant] = []
-        enriched.reserveCapacity(restaurants.count)
-        for restaurant in restaurants {
-            enriched.append(await enrichGoogleRestaurant(restaurant) ?? restaurant)
+    func enrichGoogleRestaurants(
+        _ restaurants: [Restaurant],
+        shouldContinue: @escaping @MainActor () -> Bool = { true }
+    ) async -> [Restaurant] {
+        await RestaurantEnrichment.refresh(restaurants, shouldContinue: shouldContinue) { [self] in
+            await enrichGoogleRestaurant($0)
         }
-        return enriched
     }
 
     func enrichGoogleRestaurant(_ restaurant: Restaurant) async -> Restaurant? {
