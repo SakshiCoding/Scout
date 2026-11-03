@@ -237,3 +237,37 @@ The harness generates a 4000×3000 JPEG with EXIF rotation and verifies a 384×5
 The implementation follows Apple's [ImageIO orientation option](https://developer.apple.com/documentation/imageio/kcgimagesourcecreatethumbnailwithtransform) and [video image size limit](https://developer.apple.com/documentation/avfoundation/avassetimagegenerator/maximumsize). The cache's 32MB cost budget and 128-item limit are advisory NSCache eviction hints. The full original file is still downloaded, and opening/sharing originals is unchanged.
 
 On a physical device with a large journal, scroll index rows and scrapbook polaroids, revisit the same media in the viewer strip/cross-post preview, verify portrait orientation and video badges, and open/share an original to check full quality. Delete an item and sign out while downloads are slow; old previews must not reappear. Profile scrolling and peak memory with Instruments as part of the remaining release pass.
+
+## Restaurant journal covers
+
+```sh
+Tests/run-restaurant-cover-tests.sh
+Tests/run-restaurant-cover-tests.sh /tmp/scout-cover-previews
+Tests/run-restaurant-cover-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-ios-previews
+Tests/run-media-thumbnail-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-ios-previews
+```
+
+The cover harness compiles the production selector, load state, and hero view. It verifies active-circle/restaurant isolation, photo-only selection, newest-first ordering with stable ties, missing paths, empty/video-only journals, up to three fallback attempts, retry, immediate deletion/replacement hiding, overlapping requests, cancellation, and clearing a scope. Five production hero PNGs (landscape, portrait crop, empty, loading, failed/retry) render on macOS; iOS Simulator runs the same selection/load-state checks. The media harness exercises real native ImageIO/AVFoundation and 1024px cover decoding, independent size caches, duplicate cover callers, deletion invalidation of all variants, and sign-out during a download. No Google API key is needed.
+
+Covers come from the existing authenticated private Storage download; no public URL or persisted cover selection is added. The feature also includes an additive restrictive Storage membership policy to guard against legacy bucket-wide grants. The original file is still downloaded, then downsampled off the UI actor. The cache's 32MB/128-entry limits are advisory across both preview sizes. Other photo/video thumbnail behavior and original sharing stay unchanged.
+
+In a signed-in circle, open a restaurant with journal photos and tap View journal. Add a newer photo, delete the current cover, and move between circles with different journals: covers should update using current media only. Try portrait/landscape photos, a video-only journal, failed downloads and Retry photo. Sign out or leave the screen while a download is slow; an old image must not reappear. Check the existing back/circle controls remain legible over bright photos, VoiceOver labels and retry targets, plus real large-journal memory behavior on a device.
+
+Run the actual Storage policy migration against isolated PGlite (uses the pinned existing database-test dependency):
+
+```sh
+node Tests/database/scout-storage-membership.test.mjs
+```
+
+This reproduces the legacy cross-circle read leak before applying the migration, then checks member reads/uploads/deletes, cross-circle writes and updates, anonymous/outsider denial, malformed paths, revoked membership, idempotence, and preservation of other buckets. The restrictive policy supplements existing permissive policies instead of deleting dashboard policies or changing unrelated buckets.
+
+The opt-in hosted check requires two confirmed disposable accounts named scout-cover-…@example.com, with exactly one owner member in a dedicated circle, one restaurant/visit, and no existing media. Use a private JSON config outside the repository with disposable=true, url, anonKey (public client key), circleId, restaurantId, visitId, photoFile (JPEG), and owner/outsider objects containing userId, email, password. The local media harness can generate portrait-source.jpg as a synthetic input. The test creates/removes only its own photo and media row, then signs out both accounts; the setup owner must remove the disposable circle/accounts afterward.
+
+```sh
+SCOUT_COVER_TEST_CONFIG=/private/config.json SCOUT_COVER_FIXTURE=/private/cover-fixture.json \
+  node Tests/database/hosted-restaurant-cover.test.mjs
+Tests/run-restaurant-cover-tests.sh /tmp/scout-cover-previews /private/cover-fixture.json
+Tests/run-restaurant-cover-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-ios-previews /private/cover-fixture.json
+```
+
+SCOUT_COVER_FIXTURE exports only test media metadata and authenticated download bytes (no sessions) for the native Swift pipeline check. Delete the exported JSON/JPEG and private config afterward. Hosted verification on November 3, 2026 found and fixed broad legacy Storage read/upload policies using 20261103122144_enforce_scout_storage_membership.sql. Owner operations and outsider/anonymous/public denial passed afterward. The hosted JSON/photo passed through the real Swift selector, 1024px decoder, cache, and load state on macOS and iOS Simulator. The resumed Scout project is healthy, disposable accounts/circle/media/objects were removed, and existing security advisories were unchanged. This covers actual hosted access and native rendering behavior; full device scrolling/VoiceOver/navigation remains the walkthrough above.

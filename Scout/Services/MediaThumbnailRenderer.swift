@@ -1,11 +1,16 @@
 import AVFoundation
 import ImageIO
 
+enum MediaPreviewSize: String, CaseIterable, Sendable {
+    case thumbnail, cover
+    nonisolated var maximumPixelSize: Int { self == .cover ? 1024 : 512 }
+}
+
 enum MediaThumbnailRenderer {
-    nonisolated static let maximumPixelSize = 512
 
     /// Called by the store's detached task so image decoding/file IO never blocks SwiftUI.
-    nonisolated static func render(data: Data, mediaType: Media.MediaType, fileExtension: String) async -> CGImage? {
+    nonisolated static func render(data: Data, mediaType: Media.MediaType, fileExtension: String,
+                                  size: MediaPreviewSize = .thumbnail) async -> CGImage? {
         guard !Task.isCancelled else { return nil }
         switch mediaType {
         case .photo:
@@ -14,7 +19,7 @@ enum MediaThumbnailRenderer {
             return CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize,
+                kCGImageSourceThumbnailMaxPixelSize: size.maximumPixelSize,
                 kCGImageSourceShouldCacheImmediately: true
             ] as CFDictionary)
         case .video:
@@ -27,7 +32,7 @@ enum MediaThumbnailRenderer {
                 try Task.checkCancellation()
                 let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
                 generator.appliesPreferredTrackTransform = true
-                generator.maximumSize = CGSize(width: maximumPixelSize, height: maximumPixelSize)
+                generator.maximumSize = CGSize(width: size.maximumPixelSize, height: size.maximumPixelSize)
                 return await withTaskCancellationHandler {
                     try? await generator.image(at: .zero).image
                 } onCancel: {

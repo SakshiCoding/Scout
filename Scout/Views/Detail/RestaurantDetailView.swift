@@ -126,19 +126,7 @@ struct RestaurantDetailView: View {
 
     private func heroArea(_ r: Restaurant) -> some View {
         ZStack(alignment: .top) {
-            // Placeholder hero
-            Atlas.paper2
-                .frame(height: 300)
-                .overlay(
-                    VStack(spacing: 8) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 32, weight: .ultraLight))
-                            .foregroundColor(Atlas.ink3)
-                        Text("No photo yet")
-                            .font(Atlas.Font.sans(12))
-                            .foregroundColor(Atlas.ink3)
-                    }
-                )
+            RestaurantJournalCoverView(restaurant: r, openJournal: { showJournal = true })
 
             // Controls overlay
             HStack(alignment: .center) {

@@ -67,10 +67,11 @@ import UIKit
         precondition(writer.status == .completed, "Video fixture failed: \(String(describing: writer.error))")
         return try Data(contentsOf: url)
     }
-    static func render(_ data: Data, type: Media.MediaType = .photo, ext: String = "jpg") async -> CGImage? {
+    static func render(_ data: Data, type: Media.MediaType = .photo, ext: String = "jpg",
+                       size: MediaPreviewSize = .thumbnail) async -> CGImage? {
         await Task.detached {
             precondition(!Thread.isMainThread)
-            return await MediaThumbnailRenderer.render(data: data, mediaType: type, fileExtension: ext)
+            return await MediaThumbnailRenderer.render(data: data, mediaType: type, fileExtension: ext, size: size)
         }.value
     }
     static func temporaryThumbnailFiles() throws -> Set<String> {
@@ -81,9 +82,14 @@ import UIKit
         let directory = URL(fileURLWithPath: CommandLine.arguments[1])
         let large = image(width: 4000, height: 3000)
         let jpeg = encode(large, type: .jpeg, orientation: 6)
+        try jpeg.write(to: directory.appendingPathComponent("portrait-source.jpg"))
         let portrait = await render(jpeg)!
         precondition(portrait.width == 384 && portrait.height == 512)
         precondition(portrait.bytesPerRow * portrait.height <= 1_100_000)
+        let cover = await render(jpeg, size: .cover)!
+        precondition(cover.width == 768 && cover.height == 1024)
+        precondition(cover.bytesPerRow * cover.height <= 4_300_000)
+        try encode(cover, type: .png).write(to: directory.appendingPathComponent("portrait-cover.png"))
         #if canImport(UIKit)
         let displayImage = UIImage(cgImage: portrait)
         precondition(displayImage.imageOrientation == .up && displayImage.size == CGSize(width: 384, height: 512))
@@ -179,5 +185,37 @@ import UIKit
         let retry = await store.thumbnail(for: media) { png }
         precondition(retry?.width == 80)
         print("PASS independent caller cancellation, sign-out/clear and deletion during download, replacement isolation, failed/corrupt retries")
+
+        // Covers and small thumbnails share the same budget, but cannot reuse the wrong size.
+        let variants = MediaThumbnailStore()
+        let covered = DeferredDownload()
+        let coverTask = Task { await variants.thumbnail(for: media, size: .cover) { try await covered.load() } }
+        await wait { covered.requests.count == 1 }
+        var duplicateStarted = false
+        let duplicate = Task {
+            duplicateStarted = true
+            return await variants.thumbnail(for: media, size: .cover) { preconditionFailure("Duplicate cover download") }
+        }
+        await wait { duplicateStarted }
+        let thumb = await variants.thumbnail(for: media) { jpeg }
+        covered.finish(0, data: jpeg)
+        let coverImage = await coverTask.value
+        let duplicateImage = await duplicate.value
+        precondition(thumb?.height == 512 && coverImage?.height == 1024 && duplicateImage === coverImage)
+        let cachedCover = await variants.thumbnail(for: media, size: .cover) { preconditionFailure("Cover cache miss") }
+        let cachedThumb = await variants.thumbnail(for: media) { preconditionFailure("Thumbnail cache miss") }
+        precondition(cachedCover === coverImage && cachedThumb === thumb)
+        variants.remove(path: media.storagePath)
+        let replacedCover = await variants.thumbnail(for: media, size: .cover) { png }
+        let replacedThumb = await variants.thumbnail(for: media) { png }
+        precondition(replacedCover?.width == 80 && replacedThumb?.width == 80)
+        variants.clear()
+        let pendingCover = Task { await variants.thumbnail(for: media, size: .cover) { try await covered.load() } }
+        await wait { covered.requests.count == 2 }
+        variants.clear()
+        covered.finish(1, data: jpeg)
+        let discardedCover = await pendingCover.value
+        precondition(discardedCover == nil)
+        print("PASS oriented 1024px covers, variant cache isolation/coalescing, shared deletion invalidation, and sign-out during cover download")
     }
 }

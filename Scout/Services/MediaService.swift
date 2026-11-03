@@ -18,6 +18,12 @@ final class MediaService {
         return url
     }
 
+    func coverImage(for media: Media, supabase: SupabaseService) async -> CGImage? {
+        await thumbnails.thumbnail(for: media, size: .cover) {
+            try await supabase.downloadMedia(path: media.storagePath)
+        }
+    }
+
     func removeCachedThumbnail(for media: Media) {
         thumbnails.remove(path: media.storagePath)
         try? FileManager.default.removeItem(at: temporaryURL(for: media))
