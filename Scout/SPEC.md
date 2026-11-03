@@ -191,6 +191,9 @@ Four tabs with line-drawn icons (1.6pt stroke, burnt orange when active, subdued
 
 ### Screen 2 — Restaurant Detail
 
+Implemented journal-cover slice: the current 300pt hero automatically shows a recent photo from this restaurant in the active circle's journal, using a bounded 1024px preview. View journal opens the scrapbook; loading, empty/video-only, failure, retry, and older-photo fallback states preserve the existing controls. Google-provided hero photos and the remaining targets below are separate work.
+
+
 **Purpose:** Full info card for a saved restaurant.
 
 **Layout (top → bottom):**
