@@ -251,4 +251,46 @@ The SDK integration follows Google's [Place Details and supported open-status AP
 
 With a configured Google key, open a Google-linked restaurant. Check weekly hours and source attribution, Refresh, website/phone reservation actions, and a foreground refresh after leaving the app. Try a manual place and a place without published hours. On a slow connection, leave the detail screen, switch circles, or sign out before the response; old details must not appear in another scope. Disable connectivity and Retry; saved-place actions should remain usable. Check temporary/permanent closures when available, localized schedules, VoiceOver, and larger text sizes on a device. Hour fields may affect Google API billing; they are requested only by the detail screen.
 
-Live verification status (October 27, 2026): a disposable Simulator app compiled the production Places service, loader, model, and hours card against the installed SDK. Google rejected both the detail lookup and a minimal Place ID-only diagnostic with HTTP 400 / API_KEY_INVALID: “API key expired.” The implementation/local checks are complete, but no successful live hours response has been verified. Replace GOOGLE_MAPS_API_KEY in the ignored Scout/Config.xcconfig with a valid iOS key for com.sakshisangani.Scout with Places API (New) access, rebuild, and repeat the live check before merging. No Supabase accounts or records were changed.
+Live verification passed on November 25, 2026 using the refreshed local key. The disposable native app compiled the production Places service, loader, model and card against the installed Google SDK. It searched for a public restaurant and confirmed seven weekday rows, a checked open status and website/phone contact availability. An initial run returned no Google search result while a basic lookup worked; subsequent fresh full checks passed. No Scout accounts or database writes are needed.
+
+To repeat, first build the signed Simulator app with the ignored local Config.xcconfig, create and boot a fresh device whose name starts with Scout Hours QA, then run:
+
+```sh
+Tests/run-live-place-hours-check.sh SIMULATOR_UUID /tmp/scout-derived
+```
+
+The script waits for boot readiness, refuses to replace an existing Scout installation, copies only the Maps key into a private temporary QA bundle, and removes that bundle/install on exit. It prints sanitized status/contact/count results without credentials. It requires a valid Google key with Places access and makes billable Google Places requests. Delete the disposable Simulator after the check. Physical-device navigation, accessibility and larger-text checks remain the manual walkthrough above.
+
+## Restaurant journal covers
+
+```sh
+Tests/run-restaurant-cover-tests.sh
+Tests/run-restaurant-cover-tests.sh /tmp/scout-cover-previews
+Tests/run-restaurant-cover-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-ios-previews
+Tests/run-media-thumbnail-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-ios-previews
+```
+
+The cover harness compiles the production selector, load state, and hero view. It verifies active-circle/restaurant isolation, photo-only selection, newest-first ordering with stable ties, missing paths, empty/video-only journals, up to three fallback attempts, retry, immediate deletion/replacement hiding, overlapping requests, cancellation, and clearing a scope. Five production hero PNGs (landscape, portrait crop, empty, loading, failed/retry) render on macOS; iOS Simulator runs the same selection/load-state checks. The media harness exercises real native ImageIO/AVFoundation and 1024px cover decoding, independent size caches, duplicate cover callers, deletion invalidation of all variants, and sign-out during a download. No Google API key is needed.
+
+Covers come from the existing authenticated private Storage download; no public URL or persisted cover selection is added. The feature also includes an additive restrictive Storage membership policy to guard against legacy bucket-wide grants. The original file is still downloaded, then downsampled off the UI actor. The cache's 32MB/128-entry limits are advisory across both preview sizes. Other photo/video thumbnail behavior and original sharing stay unchanged.
+
+In a signed-in circle, open a restaurant with journal photos and tap View journal. Add a newer photo, delete the current cover, and move between circles with different journals: covers should update using current media only. Try portrait/landscape photos, a video-only journal, failed downloads and Retry photo. Sign out or leave the screen while a download is slow; an old image must not reappear. Check the existing back/circle controls remain legible over bright photos, VoiceOver labels and retry targets, plus real large-journal memory behavior on a device.
+
+Run the actual Storage policy migration against isolated PGlite (uses the pinned existing database-test dependency):
+
+```sh
+node Tests/database/scout-storage-membership.test.mjs
+```
+
+This reproduces the legacy cross-circle read leak before applying the migration, then checks member reads/uploads/deletes, cross-circle writes and updates, anonymous/outsider denial, malformed paths, revoked membership, idempotence, and preservation of other buckets. The restrictive policy supplements existing permissive policies instead of deleting dashboard policies or changing unrelated buckets.
+
+The opt-in hosted check requires two confirmed disposable accounts named scout-cover-…@example.com, with exactly one owner member in a dedicated circle, one restaurant/visit, and no existing media. Use a private JSON config outside the repository with disposable=true, url, anonKey (public client key), circleId, restaurantId, visitId, photoFile (JPEG), and owner/outsider objects containing userId, email, password. The local media harness can generate portrait-source.jpg as a synthetic input. The test creates/removes only its own photo and media row, then signs out both accounts; the setup owner must remove the disposable circle/accounts afterward.
+
+```sh
+SCOUT_COVER_TEST_CONFIG=/private/config.json SCOUT_COVER_FIXTURE=/private/cover-fixture.json \
+  node Tests/database/hosted-restaurant-cover.test.mjs
+Tests/run-restaurant-cover-tests.sh /tmp/scout-cover-previews /private/cover-fixture.json
+Tests/run-restaurant-cover-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-ios-previews /private/cover-fixture.json
+```
+
+SCOUT_COVER_FIXTURE exports only test media metadata and authenticated download bytes (no sessions) for the native Swift pipeline check. Delete the exported JSON/JPEG and private config afterward. Hosted verification on November 3, 2026 found and fixed broad legacy Storage read/upload policies using 20261103122144_enforce_scout_storage_membership.sql. Owner operations and outsider/anonymous/public denial passed afterward. The hosted JSON/photo passed through the real Swift selector, 1024px decoder, cache, and load state on macOS and iOS Simulator. The resumed Scout project is healthy, disposable accounts/circle/media/objects were removed, and existing security advisories were unchanged. This covers actual hosted access and native rendering behavior; full device scrolling/VoiceOver/navigation remains the walkthrough above.
