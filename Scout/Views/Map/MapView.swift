@@ -493,8 +493,6 @@ private struct MapPeekCard: View {
                         .padding(.top, 4)
                 }
 
-                StatusDot(status: .open)
-                    .padding(.top, 6)
             }
 
             Spacer()

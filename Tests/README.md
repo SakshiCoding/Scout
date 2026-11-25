@@ -238,6 +238,29 @@ The implementation follows Apple's [ImageIO orientation option](https://develope
 
 On a physical device with a large journal, scroll index rows and scrapbook polaroids, revisit the same media in the viewer strip/cross-post preview, verify portrait orientation and video badges, and open/share an original to check full quality. Delete an item and sign out while downloads are slow; old previews must not reappear. Profile scrolling and peak memory with Instruments as part of the remaining release pass.
 
+## Restaurant opening hours
+
+```sh
+Tests/run-place-hours-tests.sh
+Tests/run-place-hours-tests.sh /tmp/scout-hours-previews
+```
+
+This credential-free harness compiles the production hours model, load-state model, Atlas theme, and hours card. Deferred responses verify loading, manual/empty-ID fallback, overlapping requests, retry after failure, cancellation, and invalidating a request while the app is inactive or signed out. Data checks preserve localized weekday order, split/overnight/24-hour text, checked status/date, contacts, and linked attribution. Seven production card PNGs cover ready/loading/failed/manual/unknown/temporary/permanent closure states; supplying a folder retains them for visual review.
+
+The SDK integration follows Google's [Place Details and supported open-status API](https://developers.google.com/maps/documentation/places/ios-sdk/details-place) and [source attribution](https://developers.google.com/maps/documentation/places/ios-sdk/policies). A detail-screen request fetches explicit website/phone, place ID, regular/current/secondary hours, UTC offset, and business status fields. It does not add hours to list/map requests or persist them. The checked status includes a timestamp rather than claiming it stays live indefinitely. Missing required hours remain unknown; weekday strings are not parsed to guess status or today's row.
+
+With a configured Google key, open a Google-linked restaurant. Check weekly hours and source attribution, Refresh, website/phone reservation actions, and a foreground refresh after leaving the app. Try a manual place and a place without published hours. On a slow connection, leave the detail screen, switch circles, or sign out before the response; old details must not appear in another scope. Disable connectivity and Retry; saved-place actions should remain usable. Check temporary/permanent closures when available, localized schedules, VoiceOver, and larger text sizes on a device. Hour fields may affect Google API billing; they are requested only by the detail screen.
+
+Live verification passed on November 25, 2026 using the refreshed local key. The disposable native app compiled the production Places service, loader, model and card against the installed Google SDK. It searched for a public restaurant and confirmed seven weekday rows, a checked open status and website/phone contact availability. An initial run returned no Google search result while a basic lookup worked; subsequent fresh full checks passed. No Scout accounts or database writes are needed.
+
+To repeat, first build the signed Simulator app with the ignored local Config.xcconfig, create and boot a fresh device whose name starts with Scout Hours QA, then run:
+
+```sh
+Tests/run-live-place-hours-check.sh SIMULATOR_UUID /tmp/scout-derived
+```
+
+The script waits for boot readiness, refuses to replace an existing Scout installation, copies only the Maps key into a private temporary QA bundle, and removes that bundle/install on exit. It prints sanitized status/contact/count results without credentials. It requires a valid Google key with Places access and makes billable Google Places requests. Delete the disposable Simulator after the check. Physical-device navigation, accessibility and larger-text checks remain the manual walkthrough above.
+
 ## Restaurant journal covers
 
 ```sh

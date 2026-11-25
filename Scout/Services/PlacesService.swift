@@ -23,15 +23,6 @@ struct PlaceSearchResult: Identifiable, Hashable {
     let vibeHints: Set<String>
 }
 
-struct PlaceContactDetails: Hashable {
-    let websiteURL: URL?
-    let phoneNumber: String?
-
-    var hasDirectContact: Bool {
-        websiteURL != nil || phoneNumber?.nonEmpty != nil
-    }
-}
-
 @MainActor
 final class PlacesService {
     static let shared = PlacesService()
@@ -89,8 +80,7 @@ final class PlacesService {
         return enriched
     }
 
-    func contactDetails(for restaurant: Restaurant) async -> PlaceContactDetails? {
-        guard let placeId = restaurant.googlePlaceId else { return nil }
+    func contactDetails(placeId: String) async -> PlaceContactDetails? {
         return try? await fetchGoogleContactDetails(placeId: placeId)
     }
 
@@ -161,33 +151,53 @@ final class PlacesService {
 
     private func fetchGoogleContactDetails(placeId: String) async throws -> PlaceContactDetails {
         guard googleEnabled else { throw PlacesServiceError.googleNotConfigured }
-
         let properties = [
-            GMSPlaceProperty.website,
-            GMSPlaceProperty.phoneNumber
+            GMSPlaceProperty.placeID, .website, .phoneNumber, .openingHours,
+            .currentOpeningHours, .secondaryOpeningHours, .utcOffsetMinutes, .businessStatus
         ].map(\.rawValue)
-        let request = GMSFetchPlaceRequest(
-            placeID: placeId,
-            placeProperties: properties,
-            sessionToken: nil
-        )
-
-        return try await withCheckedThrowingContinuation { continuation in
+        let request = GMSFetchPlaceRequest(placeID: placeId, placeProperties: properties, sessionToken: nil)
+        let place: GMSPlace = try await withCheckedThrowingContinuation { continuation in
             GMSPlacesClient.shared().fetchPlace(with: request) { place, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
+                if let error { continuation.resume(throwing: error); return }
                 guard let place else {
                     continuation.resume(throwing: PlacesServiceError.missingGooglePlace)
                     return
                 }
-                continuation.resume(returning: PlaceContactDetails(
-                    websiteURL: place.website,
-                    phoneNumber: place.phoneNumber?.nonEmpty
-                ))
+                continuation.resume(returning: place)
             }
         }
+        try Task.checkCancellation()
+        let checkedAt = Date()
+        let status: PlaceContactDetails.OpenStatus
+        switch place.businessStatus {
+        case .closedTemporarily: status = .temporarilyClosed
+        case .closedPermanently: status = .permanentlyClosed
+        default:
+            // Missing hours can cause the SDK to refetch them. Keep unknown rather than
+            // triggering another billable lookup for a place without usable hours.
+            if place.openingHours != nil, place.currentOpeningHours != nil,
+               place.utcOffsetMinutes != nil, place.placeID != nil {
+                status = await withCheckedContinuation { continuation in
+                    let openRequest = GMSPlaceIsOpenRequest(place: place, date: checkedAt)
+                    GMSPlacesClient.shared().isOpen(with: openRequest) { response, error in
+                        guard error == nil else {
+                            continuation.resume(returning: .unknown); return
+                        }
+                        switch response.status {
+                        case .open: continuation.resume(returning: .open)
+                        case .closed: continuation.resume(returning: .closed)
+                        default: continuation.resume(returning: .unknown)
+                        }
+                    }
+                }
+            } else { status = .unknown }
+        }
+        return PlaceContactDetails(
+            websiteURL: place.website, phoneNumber: place.phoneNumber?.nonEmpty,
+            weekdayText: place.openingHours?.weekdayText ?? [], openStatus: status,
+            checkedAt: checkedAt,
+            providerAttribution: place.attributions.flatMap { try? AttributedString($0, including: \.foundation) }
+        )
     }
 
     private func searchApple(query: String, near location: CLLocation?) async -> [PlaceSearchResult] {
