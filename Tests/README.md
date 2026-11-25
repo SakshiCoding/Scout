@@ -294,3 +294,24 @@ Tests/run-restaurant-cover-tests.sh --simulator SIMULATOR_UUID /tmp/scout-cover-
 ```
 
 SCOUT_COVER_FIXTURE exports only test media metadata and authenticated download bytes (no sessions) for the native Swift pipeline check. Delete the exported JSON/JPEG and private config afterward. Hosted verification on November 3, 2026 found and fixed broad legacy Storage read/upload policies using 20261103122144_enforce_scout_storage_membership.sql. Owner operations and outsider/anonymous/public denial passed afterward. The hosted JSON/photo passed through the real Swift selector, 1024px decoder, cache, and load state on macOS and iOS Simulator. The resumed Scout project is healthy, disposable accounts/circle/media/objects were removed, and existing security advisories were unchanged. This covers actual hosted access and native rendering behavior; full device scrolling/VoiceOver/navigation remains the walkthrough above.
+
+### MVP beta: Google photos, upload formats, and release packaging
+
+`Tests/run-place-photo-tests.sh /tmp/scout-google-cover.png` exercises the production photo loader with overlapping, canceled, cleared and failed/retried requests and preserves attribution links. Its macOS ImageRenderer snapshot checks geometry; native `Link` controls do not render in that offscreen mode. For actual photo/credit appearance use a fresh `Scout Hours QA…` Simulator and:
+
+```sh
+SCOUT_LIVE_SCREENSHOT=/tmp/scout-live-photo.png Tests/run-live-place-hours-check.sh SIMULATOR_UUID /tmp/scout-derived
+Tests/run-media-upload-tests.sh
+```
+
+The live check now verifies a real Google photo and author along with hours/contact, without Scout accounts or database writes. It refuses to replace an existing Scout installation and removes its disposable app. The optional screenshot captures native links. It requires a local Maps key with the correct bundle/API access and a prior Scout Simulator build.
+
+The upload suite tests real on-disk file import before reading bytes, empty/oversize rejection, supported MIME/extension pairs, traversal/mismatch rejection, exact photo/video/entry boundaries, and the actual idempotent bucket migration in Postgres. The production composer re-encodes photos as JPEG, bounds photo/video previews, and reports import failures rather than silently dropping them. Preflight validation runs before creating a visit and before any Storage uploads.
+
+`SCOUT_UPLOAD_TEST_CONFIG=/private/path/config.json node Tests/database/hosted-journal-uploads.test.mjs` is opt-in. Use only disposable confirmed `scout-cover-…@example.com` owner/outsider accounts, an owner-only test circle/restaurant/visit, and real files. Its private JSON has `disposable: true`, `url`, `anonKey`, `circleId`, `restaurantId`, `visitId`, `owner`/`outsider` objects (`userId`, `email`, `password`), and `files` objects (`file`, `ext`, `mime`, `mediaType`). Run only after applying the migration. It checks exact owner round-trip bytes, metadata isolation, outsider/anonymous read+write denial, private URL denial, unsupported MIME and >50 MiB rejection. Cleanup removes created media/objects and signs out; the fixture owner must then remove the disposable circle/accounts after confirming no Storage objects remain. Never commit that JSON or credentials.
+
+Generate synthetic real media with `Tests/create-journal-upload-fixtures.sh /tmp/scout-journal-fixtures`. Pass a directory of the same real `fixture.jpg/png/heic/heif/mov/mp4/m4v` files to `Tests/run-journal-codec-tests.sh DIRECTORY --simulator SIMULATOR_UUID` for production native import, validation, bounded thumbnail rendering, and video playability/duration checks. These are codec/Storage tests, not a claim that a physical PhotosPicker or camera walkthrough has passed.
+
+On November 25, 2026 all seven hosted formats and all seven iOS Simulator codec checks passed. Unsupported/oversized writes were rejected. Fixture accounts, circle, media, objects and sessions were removed; security-advisor findings matched baseline. Existing cover, media-thumbnail, hours, widget, restaurant-loading, pick, invitation and Storage-membership regressions also passed.
+
+Follow `Docs/TestFlight.md` for signing, archive/export/upload commands, and the two-iPhone acceptance checklist. The unsigned Release device archive passed for all three targets at version 1.0/build 2. The signed archive was blocked by absent Xcode accounts/profiles for team `345D62AZC4`; upload/processing and physical acceptance remain pending. Unsigned archives cannot be uploaded or installed.

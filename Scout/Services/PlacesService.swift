@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import GooglePlaces
 import MapKit
+import UIKit
 
 struct PlaceSearchResult: Identifiable, Hashable {
     enum Provider: Hashable {
@@ -82,6 +83,36 @@ final class PlacesService {
 
     func contactDetails(placeId: String) async -> PlaceContactDetails? {
         return try? await fetchGoogleContactDetails(placeId: placeId)
+    }
+
+    /// Fetch on demand; photo bytes and references are never persisted by Scout.
+    func photo(placeId: String) async -> PlacePhoto? {
+        guard googleEnabled, !Task.isCancelled else { return nil }
+        let request = GMSFetchPlaceRequest(placeID: placeId,
+            placeProperties: [GMSPlaceProperty.photos.rawValue], sessionToken: nil)
+        let place: GMSPlace? = await withCheckedContinuation { continuation in
+            GMSPlacesClient.shared().fetchPlace(with: request) { place, _ in
+                continuation.resume(returning: place)
+            }
+        }
+        guard !Task.isCancelled else { return nil }
+        for metadata in (place?.photos ?? []).prefix(3) {
+            let request = GMSFetchPhotoRequest(photoMetadata: metadata,
+                maxSize: CGSize(width: 1024, height: 1024))
+            let image: UIImage? = await withCheckedContinuation { continuation in
+                GMSPlacesClient.shared().fetchPhoto(with: request) { image, _ in
+                    continuation.resume(returning: image)
+                }
+            }
+            guard !Task.isCancelled else { return nil }
+            if let image = image?.cgImage {
+                return PlacePhoto(image: image,
+                    attribution: metadata.attributions.flatMap { try? AttributedString($0, including: \.foundation) },
+                    authors: (metadata.authorAttributions ?? []).map { .init(name: $0.name, url: $0.uri) },
+                    googleMapsURL: metadata.googleMapsURL, reportURL: metadata.flagContentURL)
+            }
+        }
+        return nil
     }
 
     private func searchGoogle(

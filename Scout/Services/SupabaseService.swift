@@ -464,6 +464,7 @@ final class SupabaseService {
         circleId: UUID,
         userId: UUID
     ) async throws -> [Media] {
+        try ScoutMediaUploadPolicy.validate(uploads)
         let bucket = client.storage.from("scout-media")
         var savedMedia: [Media] = []
 

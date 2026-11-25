@@ -8,8 +8,14 @@ import SwiftUI
 
 private struct LiveHoursCheckView: View {
     @State private var state = PlaceDetailsLoadState()
+    @State private var photo: PlacePhoto?
     var body: some View {
         ScrollView {
+            if let photo {
+                Image(photo.image, scale: 1, label: Text("Live Google restaurant photo"))
+                    .resizable().scaledToFit().frame(maxHeight: 300)
+                PlacePhotoCredits(photo: photo)
+            }
             RestaurantHoursCard(details: state.details, isLoading: state.isLoading,
                 failed: state.failed, canLoad: true, refresh: {})
                 .padding(20)
@@ -24,7 +30,10 @@ private struct LiveHoursCheckView: View {
             }
             await state.load(placeId: id) { await service.contactDetails(placeId: $0) }
             guard let details = state.details else { await diagnostic(stage: "details"); return }
-            report(["passed": details.weekdayText.count == 7 && details.openStatus != .unknown && details.hasDirectContact,
+            photo = await service.photo(placeId: id)
+            report(["passed": details.weekdayText.count == 7 && details.openStatus != .unknown && details.hasDirectContact && photo != nil && !(photo?.authors.isEmpty ?? true),
+                    "photoWidth": photo?.image.width ?? 0, "photoHeight": photo?.image.height ?? 0,
+                    "photoAuthors": photo?.authors.count ?? 0,
                     "stage": "complete", "weekdayRows": details.weekdayText.count,
                     "status": details.openStatus.rawValue, "hasContact": details.hasDirectContact,
                     "checkedAt": details.checkedAt.ISO8601Format()])

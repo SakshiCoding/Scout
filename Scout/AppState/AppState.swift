@@ -459,6 +459,7 @@ final class AppState {
         guard let userId = currentUser?.id,
               let circleId = activeCircle?.id else { return }
 
+        try ScoutMediaUploadPolicy.validate(mediaUploads)
         try await supabase.markVisited(restaurantId)
         if let idx = restaurants.firstIndex(where: { $0.id == restaurantId }) {
             restaurants[idx].status = .visited
