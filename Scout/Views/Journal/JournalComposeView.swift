@@ -3,6 +3,7 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 import AVFoundation
+import ImageIO
 
 struct JournalComposeView: View {
     @Environment(AppState.self) private var appState
@@ -55,9 +56,12 @@ struct JournalComposeView: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { image in
-                guard attachments.count < maxAttachmentCount,
-                      let attachment = JournalComposeAttachment.load(from: image) else { return }
-                attachments.append(attachment)
+                guard attachments.count < maxAttachmentCount else { return }
+                do {
+                    let attachment = try JournalComposeAttachment.load(from: image)
+                    try ScoutMediaUploadPolicy.validate(attachments.map(\.upload) + [attachment.upload])
+                    attachments.append(attachment)
+                } catch { errorMessage = error.localizedDescription }
             }
         }
     }
@@ -192,7 +196,8 @@ struct JournalComposeView: View {
                     PhotosPicker(
                         selection: $pickerItems,
                         maxSelectionCount: maxAttachmentCount - attachments.count,
-                        matching: .any(of: [.images, .videos])
+                        matching: .any(of: [.images, .videos]),
+                        preferredItemEncoding: .current
                     ) {
                         addMediaTile
                     }
@@ -206,6 +211,7 @@ struct JournalComposeView: View {
                 }
             }
         }
+        .disabled(isLoadingMedia || isSaving)
         .padding(.top, 22)
     }
 
@@ -336,15 +342,20 @@ struct JournalComposeView: View {
     }
 
     private func loadAttachments(from items: [PhotosPickerItem]) async {
+        guard !isLoadingMedia else { return }
         isLoadingMedia = true
+        errorMessage = nil
         defer {
             pickerItems = []
             isLoadingMedia = false
         }
 
         for item in items where attachments.count < maxAttachmentCount {
-            guard let attachment = await JournalComposeAttachment.load(from: item) else { continue }
-            attachments.append(attachment)
+            do {
+                let attachment = try await JournalComposeAttachment.load(from: item)
+                try ScoutMediaUploadPolicy.validate(attachments.map(\.upload) + [attachment.upload])
+                attachments.append(attachment)
+            } catch { errorMessage = error.localizedDescription }
         }
     }
 
@@ -378,28 +389,44 @@ private struct JournalComposeAttachment: Identifiable {
     let thumbnail: UIImage
     let upload: VisitMediaUpload
 
-    static func load(from image: UIImage) -> JournalComposeAttachment? {
-        guard let jpegData = image.jpegData(compressionQuality: 0.82) else { return nil }
-        return JournalComposeAttachment(thumbnail: image, upload: .photo(jpegData))
+    static func load(from image: UIImage) throws -> JournalComposeAttachment {
+        guard let jpegData = image.jpegData(compressionQuality: 0.82) else {
+            throw ScoutMediaUploadPolicy.Failure.unreadable
+        }
+        let upload = VisitMediaUpload.photo(jpegData)
+        try ScoutMediaUploadPolicy.validate(upload)
+        guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil),
+              let preview = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 512
+              ] as CFDictionary) else { throw ScoutMediaUploadPolicy.Failure.unreadable }
+        return JournalComposeAttachment(thumbnail: UIImage(cgImage: preview), upload: upload)
     }
 
-    static func load(from item: PhotosPickerItem) async -> JournalComposeAttachment? {
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return nil }
-        let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
-
-        if isVideo {
-            let contentType = item.supportedContentTypes.first(where: { $0.conforms(to: .movie) })
-            let fileExtension = contentType?.preferredFilenameExtension ?? "mov"
-            let mimeType = contentType?.preferredMIMEType ?? "video/quicktime"
-            guard let thumbnail = await videoThumbnail(data: data, fileExtension: fileExtension) else { return nil }
-            return JournalComposeAttachment(
-                thumbnail: thumbnail,
-                upload: .video(data, fileExtension: fileExtension, contentType: mimeType)
-            )
+    static func load(from item: PhotosPickerItem) async throws -> JournalComposeAttachment {
+        guard let file = try await item.loadTransferable(type: JournalMediaFile.self) else {
+            throw ScoutMediaUploadPolicy.Failure.unreadable
         }
-
-        guard let image = UIImage(data: data) else { return nil }
-        return load(from: image)
+        try Task.checkCancellation()
+        let isVideo = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+        if isVideo {
+            guard let type = UTType(filenameExtension: file.fileExtension), type.conforms(to: .movie),
+                  let mime = type.preferredMIMEType else { throw ScoutMediaUploadPolicy.Failure.unsupported }
+            let upload = VisitMediaUpload.video(file.data, fileExtension: file.fileExtension, contentType: mime)
+            try ScoutMediaUploadPolicy.validate(upload)
+            guard let thumbnail = await videoThumbnail(data: file.data, fileExtension: file.fileExtension) else {
+                throw ScoutMediaUploadPolicy.Failure.unreadable
+            }
+            return JournalComposeAttachment(thumbnail: thumbnail, upload: upload)
+        }
+        guard let source = CGImageSourceCreateWithData(file.data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 4096
+              ] as CFDictionary) else { throw ScoutMediaUploadPolicy.Failure.unreadable }
+        return try load(from: UIImage(cgImage: image))
     }
 
     private static func videoThumbnail(data: Data, fileExtension: String) async -> UIImage? {
@@ -413,6 +440,7 @@ private struct JournalComposeAttachment: Identifiable {
             let asset = AVURLAsset(url: url)
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 512, height: 512)
             return await withCheckedContinuation { continuation in
                 generator.generateCGImageAsynchronously(for: CMTime.zero) { image, _, _ in
                     continuation.resume(returning: image.map(UIImage.init(cgImage:)))

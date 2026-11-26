@@ -4,6 +4,27 @@ import Supabase
 struct AddRestaurantView: View {
     @Environment(AppState.self) private var appState
     @Binding var isPresented: Bool
+    private let initialPlace: PlaceSearchResult?
+
+    init(isPresented: Binding<Bool>, initialPlace: PlaceSearchResult? = nil, initialName: String = "") {
+        self._isPresented = isPresented
+        self.initialPlace = initialPlace
+        self._name = State(initialValue: initialPlace?.name ?? initialName)
+        self._selectedPlace = State(initialValue: initialPlace)
+        self._selectedAddress = State(initialValue: initialPlace?.address)
+        self._selectedLat = State(initialValue: initialPlace?.latitude)
+        self._selectedLon = State(initialValue: initialPlace?.longitude)
+        self._selectedGooglePlaceId = State(initialValue: initialPlace?.googlePlaceId)
+        self._establishmentType = State(initialValue: initialPlace?.establishmentType ?? .restaurant)
+        self._priceTier = State(initialValue: initialPlace?.priceTier ?? .two)
+        self._selectedVibeTags = State(initialValue: initialPlace?.vibeHints ?? [])
+        if let value = initialPlace?.cuisine, !RestaurantMetadataSuggestion.isGenericCuisine(value) {
+            let known = popularCuisines.contains(value)
+            self._cuisine = State(initialValue: known ? value : "")
+            self._cuisineOtherText = State(initialValue: known ? "" : value)
+            self._showCuisineOtherField = State(initialValue: !known)
+        }
+    }
 
     @State private var name                  = ""
     @State private var establishmentType     = Restaurant.EstablishmentType.restaurant
@@ -25,6 +46,7 @@ struct AddRestaurantView: View {
     @State private var selectedGooglePlaceId: String?
     @State private var searchTask: Task<Void, Never>?
 
+    @State private var appliedInitialPlace = false
     @State private var metadataRequest: MetadataRequest?
     @State private var isAutofilling = false
     @State private var autofillMessage: String?
@@ -89,6 +111,18 @@ struct AddRestaurantView: View {
                         suggestionsView
                     } else if let addr = selectedAddress {
                         selectedAddressRow(addr)
+                    }
+
+                    if let place = selectedPlace {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(place.provider == .google ? "Google Maps" : "Apple Maps")
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundStyle(Color(red: 94 / 255, green: 94 / 255, blue: 94 / 255))
+                            if let attribution = place.attribution {
+                                Text(attribution).font(Atlas.Font.sans(12)).tint(Atlas.burnt)
+                            }
+                        }
+                        .padding(.horizontal, Atlas.screenHPad).padding(.bottom, 12)
                     }
 
                     if appState.gemini.isConfigured {
@@ -254,6 +288,12 @@ struct AddRestaurantView: View {
                     }
                     .disabled(!isValid || isSaving)
                 }
+            }
+        }
+        .task {
+            if let initialPlace, !appliedInitialPlace, name == initialPlace.name {
+                appliedInitialPlace = true
+                selectPlace(initialPlace)
             }
         }
         .task(id: metadataRequest) {
@@ -488,6 +528,11 @@ struct AddRestaurantView: View {
         guard let circleId = appState.activeCircle?.id,
               let userId   = appState.currentUser?.id else {
             errorMessage = "Create a circle first before adding restaurants."
+            return
+        }
+        if let selectedPlace,
+           SavedPlaceMatch.restaurant(for: selectedPlace, in: appState.restaurants, circleId: circleId) != nil {
+            errorMessage = "This place is already saved in your circle. Close this form to open it from your list."
             return
         }
         isSaving = true

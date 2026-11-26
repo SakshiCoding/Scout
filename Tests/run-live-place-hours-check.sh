@@ -38,13 +38,17 @@ xcrun --sdk iphonesimulator swiftc -parse-as-library -sdk "$simulator_sdk" -targ
   -I "$derived_dir/SourcePackages/artifacts/ios-places-sdk/GooglePlaces/GooglePlaces.xcframework/ios-arm64_x86_64-simulator/Headers" \
   "$derived_dir/Build/Products/Debug-iphonesimulator/GooglePlaces.a" \
   -lc++ -lz -framework CoreGraphics -framework CoreLocation -framework CoreText -framework QuartzCore -framework Security -framework UIKit -Xlinker -ObjC \
-  Scout/Models/Restaurant.swift Scout/Models/PlaceContactDetails.swift Scout/Services/RestaurantEnrichment.swift \
-  Scout/Services/PlacesService.swift Scout/Services/PlaceDetailsLoadState.swift Scout/Theme/AtlasTheme.swift \
+  Scout/Models/Restaurant.swift Scout/Models/PlaceSearchResult.swift Scout/Models/PlacePhoto.swift Scout/Services/RestaurantDiscoveryState.swift Scout/Services/PlacePhotoLoadState.swift Scout/Services/PlacePhotoRequestQueue.swift Scout/Views/Detail/PlacePhotoCredits.swift Scout/Models/PlaceContactDetails.swift Scout/Services/RestaurantEnrichment.swift \
+  Scout/Services/PlaceTypeHints.swift Scout/Services/PlacesTextSearchFallback.swift Scout/Services/PlacesService.swift Scout/Services/PlaceDetailsLoadState.swift Scout/Theme/AtlasTheme.swift \
   Scout/Views/Detail/RestaurantHoursCard.swift Tests/LivePlaceHoursCheck.swift -o "$test_dir/Scout.app/Scout"
 codesign --force --sign - "$test_dir/Scout.app" >/dev/null 2>&1
 xcrun simctl install "$simulator_id" "$test_dir/Scout.app"
 installed=1
-xcrun simctl launch "$simulator_id" com.sakshisangani.Scout >/dev/null
+if [[ "${SCOUT_LIVE_DISCOVERY_ONLY:-}" == 1 ]]; then
+  xcrun simctl launch "$simulator_id" com.sakshisangani.Scout --discovery-only >/dev/null
+else
+  xcrun simctl launch "$simulator_id" com.sakshisangani.Scout >/dev/null
+fi
 container=$(xcrun simctl get_app_container "$simulator_id" com.sakshisangani.Scout data)
 for _ in {1..45}; do
   if [[ -f "$container/Documents/hours-report.json" ]]; then break; fi
@@ -58,3 +62,7 @@ r=json.loads(p.read_text())
 print(json.dumps(r,ensure_ascii=True))
 assert r.get('passed'), 'Live Google Places verification failed; see sanitized report above'
 PY
+
+if [[ -n "${SCOUT_LIVE_SCREENSHOT:-}" ]]; then
+  xcrun simctl io "$simulator_id" screenshot "$SCOUT_LIVE_SCREENSHOT" >/dev/null
+fi

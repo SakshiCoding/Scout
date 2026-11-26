@@ -2,37 +2,21 @@ import CoreLocation
 import Foundation
 import GooglePlaces
 import MapKit
-
-struct PlaceSearchResult: Identifiable, Hashable {
-    enum Provider: Hashable {
-        case google
-        case apple
-    }
-
-    let id: String
-    let provider: Provider
-    let name: String
-    let address: String?
-    let latitude: Double
-    let longitude: Double
-    let googlePlaceId: String?
-    let primaryType: String?
-    let establishmentType: Restaurant.EstablishmentType?
-    let cuisine: String?
-    let priceTier: Restaurant.PriceTier?
-    let vibeHints: Set<String>
-}
+import UIKit
 
 @MainActor
 final class PlacesService {
     static let shared = PlacesService()
 
+    private let photoQueue = PlacePhotoRequestQueue()
     private let googleEnabled: Bool
+    private let googleAPIKey: String?
 
     private init(bundle: Bundle = .main) {
         let configuredKey = (bundle.object(forInfoDictionaryKey: "GOOGLE_MAPS_API_KEY") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let apiKey = configuredKey?.hasPrefix("$(") == true ? nil : configuredKey?.nonEmpty
+        self.googleAPIKey = apiKey
         self.googleEnabled = apiKey.map(GMSPlacesClient.provideAPIKey) ?? false
     }
 
@@ -40,7 +24,8 @@ final class PlacesService {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return [] }
 
-        if googleEnabled {
+        // This SDK requires a location bias/restriction; HTTP Text Search also supports location-free queries.
+        if googleEnabled, location != nil {
             do {
                 let results = try await searchGoogle(query: trimmed, near: location)
                 if !results.isEmpty { return results }
@@ -49,6 +34,14 @@ final class PlacesService {
             }
         }
 
+        guard !Task.isCancelled else { return [] }
+        if let googleAPIKey {
+            let fallback = PlacesTextSearchFallback(apiKey: googleAPIKey, bundleId: Bundle.main.bundleIdentifier)
+            if let results = try? await fallback.search(query: trimmed, near: location), !results.isEmpty {
+                return results
+            }
+        }
+        guard !Task.isCancelled else { return [] }
         return await searchApple(query: trimmed, near: location)
     }
 
@@ -82,6 +75,40 @@ final class PlacesService {
 
     func contactDetails(placeId: String) async -> PlaceContactDetails? {
         return try? await fetchGoogleContactDetails(placeId: placeId)
+    }
+
+    /// Fetch on demand; photo bytes and references are never persisted by Scout.
+    func photo(placeId: String, pixelSize: Int = 1024) async -> PlacePhoto? {
+        await photoQueue.run { await self.fetchPhoto(placeId: placeId, pixelSize: pixelSize) }
+    }
+
+    private func fetchPhoto(placeId: String, pixelSize: Int) async -> PlacePhoto? {
+        guard googleEnabled, !Task.isCancelled else { return nil }
+        let request = GMSFetchPlaceRequest(placeID: placeId,
+            placeProperties: [GMSPlaceProperty.photos.rawValue], sessionToken: nil)
+        let place: GMSPlace? = await withCheckedContinuation { continuation in
+            GMSPlacesClient.shared().fetchPlace(with: request) { place, _ in
+                continuation.resume(returning: place)
+            }
+        }
+        guard !Task.isCancelled else { return nil }
+        for metadata in (place?.photos ?? []).prefix(3) {
+            let request = GMSFetchPhotoRequest(photoMetadata: metadata,
+                maxSize: CGSize(width: max(64, min(pixelSize, 1024)), height: max(64, min(pixelSize, 1024))))
+            let image: UIImage? = await withCheckedContinuation { continuation in
+                GMSPlacesClient.shared().fetchPhoto(with: request) { image, _ in
+                    continuation.resume(returning: image)
+                }
+            }
+            guard !Task.isCancelled else { return nil }
+            if let image = image?.cgImage {
+                return PlacePhoto(image: image,
+                    attribution: metadata.attributions.flatMap { try? AttributedString($0, including: \.foundation) },
+                    authors: (metadata.authorAttributions ?? []).map { .init(name: $0.name, url: $0.uri) },
+                    googleMapsURL: metadata.googleMapsURL, reportURL: metadata.flagContentURL)
+            }
+        }
+        return nil
     }
 
     private func searchGoogle(
@@ -247,7 +274,8 @@ private extension GMSPlace {
             establishmentType: allTypes.establishmentTypeHint,
             cuisine: allTypes.cuisineHint,
             priceTier: priceLevel.restaurantPriceTier,
-            vibeHints: allTypes.vibeHints
+            vibeHints: allTypes.vibeHints,
+            attribution: attributions.flatMap { try? AttributedString($0, including: \.foundation) }
         )
     }
 }
@@ -298,80 +326,6 @@ private extension MKPointOfInterestCategory {
         case .winery:    return ["Date night", "Special occasion"]
         default:         return []
         }
-    }
-}
-
-private extension Set where Element == String {
-    var establishmentTypeHint: Restaurant.EstablishmentType? {
-        if contains("cafe") || contains("coffee_shop") { return .cafe }
-        if contains("bakery") { return .bakery }
-        if contains("brewery") { return .brewery }
-        if contains("winery") { return .winery }
-        if contains("bar") || contains("night_club") { return .bar }
-        if contains("restaurant") || contains(where: { $0.hasSuffix("_restaurant") }) {
-            return .restaurant
-        }
-        return nil
-    }
-
-    var cuisineHint: String? {
-        let cuisines: [(String, String)] = [
-            ("american_restaurant", "American"),
-            ("barbecue_restaurant", "BBQ"),
-            ("brazilian_restaurant", "Brazilian"),
-            ("chinese_restaurant", "Chinese"),
-            ("french_restaurant", "French"),
-            ("greek_restaurant", "Greek"),
-            ("hamburger_restaurant", "American"),
-            ("indian_restaurant", "Indian"),
-            ("indonesian_restaurant", "Indonesian"),
-            ("italian_restaurant", "Italian"),
-            ("japanese_restaurant", "Japanese"),
-            ("korean_restaurant", "Korean"),
-            ("lebanese_restaurant", "Lebanese"),
-            ("mediterranean_restaurant", "Mediterranean"),
-            ("mexican_restaurant", "Mexican"),
-            ("middle_eastern_restaurant", "Middle Eastern"),
-            ("pizza_restaurant", "Italian"),
-            ("ramen_restaurant", "Japanese"),
-            ("seafood_restaurant", "Seafood"),
-            ("spanish_restaurant", "Spanish"),
-            ("steak_house", "Steakhouse"),
-            ("sushi_restaurant", "Japanese"),
-            ("thai_restaurant", "Thai"),
-            ("turkish_restaurant", "Turkish"),
-            ("vietnamese_restaurant", "Vietnamese"),
-        ]
-        return cuisines.first { contains($0.0) }?.1
-    }
-
-    var vibeHints: Set<String> {
-        var hints: Set<String> = []
-        if contains("cafe") || contains("coffee_shop") || contains("bakery") {
-            hints.formUnion(["Casual", "Quick bite"])
-        }
-        if contains("bar") || contains("night_club") {
-            hints.formUnion(["Late night", "Lively"])
-        }
-        if contains("sports_bar") {
-            hints.formUnion(["Lively", "Group"])
-        }
-        if contains("brewery") {
-            hints.formUnion(["Casual", "Lively"])
-        }
-        if contains("winery") {
-            hints.formUnion(["Date night", "Special occasion"])
-        }
-        if contains("fine_dining_restaurant") {
-            hints.formUnion(["Date night", "Special occasion", "Tasting menu"])
-        }
-        if contains("fast_food_restaurant") || contains("hamburger_restaurant") || contains("sandwich_shop") {
-            hints.formUnion(["Quick bite", "Casual"])
-        }
-        if contains("brunch_restaurant") || contains("breakfast_restaurant") {
-            hints.insert("Brunch")
-        }
-        return hints
     }
 }
 

@@ -36,7 +36,8 @@ struct Media: Identifiable, Codable {
     var contentType: String {
         switch fileExtension.lowercased() {
         case "png": return "image/png"
-        case "heic", "heif": return "image/heic"
+        case "heic": return "image/heic"
+        case "heif": return "image/heif"
         case "mp4": return "video/mp4"
         case "m4v": return "video/x-m4v"
         case "mov": return "video/quicktime"
